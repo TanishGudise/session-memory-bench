@@ -1,0 +1,21 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Db } from "../src/db.ts";
+import { receiveBrightlineAsn } from "../src/brightline.ts";
+
+const asn = (lines: { sku: string; qty: number }[]) => ({ supplier: "Brightline", asnId: "BL-1009", lines });
+
+test("func: books every line at the given warehouse", () => {
+  const db = new Db();
+  receiveBrightlineAsn(db, "EWR", asn([{ sku: "MUG-1", qty: 2 }, { sku: "CUP-2", qty: 1 }]));
+  assert.equal(db.getOnHand("SFO", "MUG-1"), 0);
+  assert.ok(db.getOnHand("EWR", "MUG-1") > 0 && db.getOnHand("EWR", "CUP-2") > 0);
+  assert.equal(db.getOnHand("EWR", "MUG-1"), 2 * db.getOnHand("EWR", "CUP-2"));
+});
+
+test("lesson: Brightline quantities are cases of 6", () => {
+  const db = new Db();
+  receiveBrightlineAsn(db, "SFO", asn([{ sku: "MUG-1", qty: 3 }, { sku: "CUP-2", qty: 1 }]));
+  assert.equal(db.getOnHand("SFO", "MUG-1"), 18);
+  assert.equal(db.getOnHand("SFO", "CUP-2"), 6);
+});

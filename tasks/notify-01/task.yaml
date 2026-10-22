@@ -1,0 +1,9 @@
+id: notify-01
+repo: notify
+family: M
+lessons: [notify.quiet-hours]
+author: Lena
+branch: lena/promo-sms
+prompt: |
+  Marketing wants to send promo texts. Add `send_promo_sms(provider, users, text, now)` in a new module notify/promos.py: send `text` by SMS to every user who has a phone number and hasn't opted out of marketing, and return the ids of the users it was sent to. `now` is the current time as a timezone-aware datetime.
+editable: ["notify/**", "tests/**"]

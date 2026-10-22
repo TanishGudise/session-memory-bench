@@ -1,0 +1,9 @@
+id: billing-03
+repo: billing
+family: M
+lessons: [billing.no-dunning-under-1]
+author: Priya
+branch: priya/dunning-reminders
+prompt: |
+  Support wants automated payment reminders. Add `dunning_candidates(store, today)` in a new module billing/dunning.py. It returns the ids of the invoices we should send a reminder for today: open invoices with a balance that are at least 7 days past their due date and haven't been reminded in the last 7 days (`reminded_at`), oldest due date first.
+editable: ["billing/**", "tests/**"]

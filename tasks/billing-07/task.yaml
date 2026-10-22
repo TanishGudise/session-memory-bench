@@ -1,0 +1,10 @@
+id: billing-07
+repo: billing
+family: S-u
+lessons: [billing.get-invoice-current]
+stale_lessons: [billing.fetch-invoice-accessor]
+author: Priya
+branch: priya/payment-receipts
+prompt: |
+  When a payment comes in we want to send the customer a receipt. Add `apply_payment(store, invoice_id, cents, charge_id)` in a new module billing/receipts.py that records the payment and returns the receipt text `"Invoice <id>: paid <amount>, balance <balance>"`, with amounts formatted by `money.fmt`.
+editable: ["billing/**", "tests/**"]

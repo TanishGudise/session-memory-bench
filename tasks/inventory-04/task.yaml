@@ -1,0 +1,9 @@
+id: inventory-04
+repo: inventory
+family: D
+lessons: [inventory.withtx]
+author: Mei
+branch: mei/stock-transfers
+prompt: |
+  Add `transferStock(db, sku, from, to, units)` in a new file src/transfer.ts that moves `units` of a SKU from one warehouse to another.
+editable: ["src/**", "test/**"]

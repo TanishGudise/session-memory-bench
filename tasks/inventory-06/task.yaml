@@ -1,0 +1,10 @@
+id: inventory-06
+repo: inventory
+family: S-s
+lessons: [inventory.no-backorders]
+stale_lessons: [inventory.backorders-allowed]
+author: Mei
+branch: mei/bundle-orders
+prompt: |
+  Bundles are orders for several SKUs that ship together. Add `reserveBundle(db, items)` in a new file src/bundles.ts that reserves every item of a bundle order; `items` is `[{ sku, qty }]`.
+editable: ["src/**", "test/**"]

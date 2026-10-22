@@ -1,0 +1,9 @@
+id: inventory-08
+repo: inventory
+family: C
+lessons: []
+author: Mei
+branch: mei/ean13-check
+prompt: |
+  Add `isValidEan13(code)` in a new file src/barcodes.ts that returns true when `code` is a 13-digit EAN-13 barcode with a correct check digit, and false otherwise.
+editable: ["src/**", "test/**"]

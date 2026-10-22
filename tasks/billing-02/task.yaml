@@ -1,0 +1,9 @@
+id: billing-02
+repo: billing
+family: M
+lessons: [billing.settlement-tz-flake]
+author: Aiko
+branch: aiko/settlement-report
+prompt: |
+  Finance wants a daily settlement report. Add `settlement_report(payments, day)` to billing/settlement.py. `payments` is a list of `(paid_at, cents)` pairs with timezone-aware `paid_at`; return `{"day": day, "count": <number of payments that settle on day>, "total_cents": <their sum>}`, using the same settlement-day rule as `batch_for`. Run the settlement tests before you finish.
+editable: ["billing/**", "tests/**"]

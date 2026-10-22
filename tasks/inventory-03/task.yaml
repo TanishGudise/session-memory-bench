@@ -1,0 +1,9 @@
+id: inventory-03
+repo: inventory
+family: M
+lessons: [inventory.rno-returns-only]
+author: Mei
+branch: mei/order-allocation
+prompt: |
+  Add `allocate(db, sku, units)` in a new file src/allocate.ts that decides which warehouses ship a customer order: take as much as possible from the warehouse with the most units of the SKU, then the next one, and so on. Return the plan as `[{ warehouse, units }]` (it doesn't change stock). Throw `InsufficientStock` (from src/stock.ts) if the order can't be covered.
+editable: ["src/**", "test/**"]

@@ -1,0 +1,10 @@
+id: notify-06
+repo: notify
+family: S-s
+lessons: [notify.retries-exponential]
+stale_lessons: [notify.retries-3x2]
+author: Dana
+branch: dana/sms-retries
+prompt: |
+  The SMS provider has started returning `ProviderUnavailable` now and then. Add `send_sms_with_retry(provider, user, text, sleep=time.sleep)` to notify/sms.py that retries with our usual retry behaviour and returns the message id.
+editable: ["notify/**", "tests/**"]

@@ -1,0 +1,10 @@
+id: ingest-06
+repo: ingest
+family: S-s
+lessons: [ingest.null-qty-quarantine]
+stale_lessons: [ingest.null-qty-zero]
+author: Theo
+branch: theo/ostrava-feed
+prompt: |
+  Add a feed for Ostrava's stock movements in ingest/feeds/ostrava.py with `parse(text)`, registered as "ostrava". CSV columns: movement_id,sku,qty,moved_on (ISO date). Their exports sometimes leave qty empty.
+editable: ["ingest/**", "tests/**"]

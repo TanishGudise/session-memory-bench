@@ -1,0 +1,9 @@
+id: inventory-01
+repo: inventory
+family: M
+lessons: [inventory.hold-expiry-15m]
+author: Kenji
+branch: kenji/available-to-promise
+prompt: |
+  The storefront needs an "available to promise" number. Add `availableToPromise(db, sku, now)` in a new file src/atp.ts: the units of `sku` we can still promise to a new customer, i.e. units on hand minus units reserved for orders minus units held in carts. `now` is the current time (a Date).
+editable: ["src/**", "test/**"]

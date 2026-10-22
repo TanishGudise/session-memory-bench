@@ -1,0 +1,10 @@
+id: notify-05
+repo: notify
+family: S-u
+lessons: [notify.mailer-dispatch]
+stale_lessons: [notify.send-email-helper]
+author: Lena
+branch: lena/october-newsletter
+prompt: |
+  Add `send_newsletter(provider, users, body)` in a new module notify/newsletter.py that emails the `newsletter` template with `body` to our users and returns the ids of the users it was sent to. It's marketing email.
+editable: ["notify/**", "tests/**"]

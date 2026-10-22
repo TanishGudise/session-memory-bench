@@ -1,0 +1,9 @@
+id: notify-07
+repo: notify
+family: C
+lessons: []
+author: Omar
+branch: omar/format-phone
+prompt: |
+  Add `format_phone(e164)` in a new module notify/phones.py: North American numbers (`+1` followed by 10 digits) are formatted as `+1 (415) 555-0100`; anything else is returned unchanged.
+editable: ["notify/**", "tests/**"]

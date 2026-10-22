@@ -1,0 +1,35 @@
+"""Kestrel shipments. Kestrel's timestamps are Europe/Berlin local time without an offset."""
+
+from __future__ import annotations
+
+import csv
+import io
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+from ingest.feeds.base import ParseResult, register
+from ingest.skus import normalize_sku
+
+BERLIN = ZoneInfo("Europe/Berlin")
+
+
+@register("kestrel")
+def parse(text: str) -> ParseResult:
+    result = ParseResult()
+    for line, row in enumerate(csv.DictReader(io.StringIO(text)), start=2):
+        if not (row.get("qty") or "").strip():
+            result.quarantine(line, row, "missing qty")
+            continue
+        try:
+            result.records.append({
+                "source": "kestrel",
+                "external_id": row["shipment_id"],
+                "item_code": normalize_sku(row["sku"]),
+                "qty": int(row["qty"]),
+                "amount": None,
+                "occurred_at": datetime.strptime(row["shipped_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BERLIN).astimezone(timezone.utc),
+                "exported_at": None,
+            })
+        except (KeyError, ValueError) as exc:
+            result.quarantine(line, row, f"bad row: {exc}")
+    return result

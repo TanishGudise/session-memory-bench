@@ -1,0 +1,9 @@
+id: billing-05
+repo: billing
+family: D
+lessons: [billing.gateway-idempotency]
+author: Marco
+branch: marco/late-fees
+prompt: |
+  We're adding late fees. Add `charge_late_fee(store, gateway, invoice_id, cents)` to billing/payments.py: charge the customer's card for the fee, add a "Late fee" line to the invoice, record the payment for it (so the fee doesn't show up as an open balance), and return the charge id.
+editable: ["billing/**", "tests/**"]

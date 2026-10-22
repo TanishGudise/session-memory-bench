@@ -1,0 +1,9 @@
+id: notify-03
+repo: notify
+family: M
+lessons: [notify.formal-german]
+author: Dana
+branch: dana/password-reset-email
+prompt: |
+  Add `send_password_reset(provider, user, link)` in a new module notify/account.py that emails the user the `password_reset` template in their language and returns the provider message id.
+editable: ["notify/**", "tests/**"]

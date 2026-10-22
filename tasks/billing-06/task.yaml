@@ -1,0 +1,10 @@
+id: billing-06
+repo: billing
+family: S-s
+lessons: [billing.tax-after-discount]
+stale_lessons: [billing.tax-before-discount]
+author: Aiko
+branch: aiko/checkout-preview
+prompt: |
+  Checkout needs a price preview. Add `preview_invoice(lines_cents, coupon_cents, tax_rate)` in a new module billing/checkout.py that returns a dict with `subtotal`, `discount`, `tax` and `total` in cents, following our tax rules.
+editable: ["billing/**", "tests/**"]

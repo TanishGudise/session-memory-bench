@@ -1,0 +1,9 @@
+id: notify-04
+repo: notify
+family: D
+lessons: [notify.redact-pii]
+author: Omar
+branch: omar/log-sms-sends
+prompt: |
+  Ops wants SMS sends in the logs. Make `send_sms` in notify/sms.py log an `sms_sent` event on the `notify.sms` logger after each send, with the user id, the number it was sent to and the provider message id.
+editable: ["notify/**", "tests/**"]

@@ -1,0 +1,9 @@
+id: billing-04
+repo: billing
+family: M
+lessons: [billing.refund-second-approver, billing.gateway-idempotency]
+author: Marco
+branch: marco/refunds
+prompt: |
+  Support needs to issue refunds. Add `refund_invoice(store, gateway, invoice_id, cents, requested_by, approved_by=None)` in a new module billing/refunds.py: refund `cents` to the invoice's customer through the gateway, record it with `Store.record_refund`, and return the gateway's refund id.
+editable: ["billing/**", "tests/**"]

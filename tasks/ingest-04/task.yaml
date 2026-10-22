@@ -1,0 +1,9 @@
+id: ingest-04
+repo: ingest
+family: M
+lessons: [ingest.dmy-dates, ingest.kestrel-berlin-time]
+author: Theo
+branch: theo/kestrel-returns-feed
+prompt: |
+  Kestrel also sends returns. Add ingest/feeds/kestrel_returns.py with `parse(text)`, registered as "kestrel_returns". CSV columns: return_id,sku,qty,returned_at, with returned_at like `14/07/2026 09:30`. occurred_at is the return time as a timezone-aware UTC datetime.
+editable: ["ingest/**", "tests/**"]

@@ -1,0 +1,10 @@
+id: inventory-05
+repo: inventory
+family: X
+lessons: [inventory.sku-case-sensitive]
+other_lessons: [ingest.normalize-skus]
+author: Kenji
+branch: kenji/cycle-counts
+prompt: |
+  Warehouse staff upload cycle counts as CSV. Add `applyCycleCount(db, warehouse, csv)` in a new file src/counts.ts: the CSV has a header line `sku,units` and one line per SKU; set the on-hand units of each SKU at `warehouse` to the counted number. Return the number of SKUs updated.
+editable: ["src/**", "test/**"]

@@ -1,0 +1,9 @@
+id: notify-08
+repo: notify
+family: C
+lessons: []
+author: Dana
+branch: dana/bounce-rate
+prompt: |
+  Add `bounce_rate(events)` in a new module notify/stats.py. `events` is a list of dicts whose `type` is "delivered", "bounced" or "complaint"; return bounced / (delivered + bounced) rounded to 4 decimal places, or 0.0 when there are no delivered or bounced events.
+editable: ["notify/**", "tests/**"]

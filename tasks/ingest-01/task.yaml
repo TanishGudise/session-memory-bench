@@ -1,0 +1,9 @@
+id: ingest-01
+repo: ingest
+family: M
+lessons: [ingest.kestrel-berlin-time]
+author: Ruth
+branch: ruth/kestrel-shipments-feed
+prompt: |
+  We're getting a daily shipments file from Kestrel. Add a feed module ingest/feeds/kestrel.py with `parse(text)`, registered as "kestrel" like the other feeds. The CSV has columns shipment_id,sku,qty,shipped_at, with shipped_at like `2026-07-14 09:30:00`. Produce the usual records; occurred_at is the shipment time as a timezone-aware UTC datetime.
+editable: ["ingest/**", "tests/**"]

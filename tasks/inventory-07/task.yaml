@@ -1,0 +1,10 @@
+id: inventory-07
+repo: inventory
+family: S-u
+lessons: [inventory.stock-level]
+stale_lessons: [inventory.stock-get]
+author: Kenji
+branch: kenji/low-stock-alerts
+prompt: |
+  Purchasing wants low-stock alerts. Add `lowStock(db, threshold)` in a new file src/alerts.ts that returns the SKUs we're about to run out of (fewer than `threshold` units left that we can still sell), sorted.
+editable: ["src/**", "test/**"]

@@ -1,0 +1,9 @@
+id: ingest-02
+repo: ingest
+family: M
+lessons: [ingest.dedupe-source-external-id]
+author: Ruth
+branch: ruth/idempotent-loads
+prompt: |
+  Partners sometimes resend a whole file after a failed upload, and we end up with duplicate rows in the warehouse. Make `load(warehouse, result)` in ingest/loader.py skip records the warehouse already has, so loading the same partner data twice doesn't create duplicates. It should still return the number of rows it inserted.
+editable: ["ingest/**", "tests/**"]

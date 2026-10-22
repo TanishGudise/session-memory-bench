@@ -1,0 +1,9 @@
+id: billing-01
+repo: billing
+family: M
+lessons: [billing.expand-contract]
+author: Priya
+branch: priya/customer-billing-email
+prompt: |
+  Finance wants the address we send invoices to stored as `billing_email` instead of `email` on customers (later on, `email` will mean the login email). Please switch customers over: `Customer` should have a `billing_email` field instead of `email`, and `Store.add_customer` / `Store.get_customer` should write and read it. Include the schema change as a migration.
+editable: ["billing/**", "tests/**"]

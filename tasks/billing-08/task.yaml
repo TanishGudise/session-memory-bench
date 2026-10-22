@@ -1,0 +1,9 @@
+id: billing-08
+repo: billing
+family: C
+lessons: []
+author: Aiko
+branch: aiko/customer-statement
+prompt: |
+  Add `statement_text(store, customer_id)` to billing/reports.py: one line per invoice of that customer, ordered by issue date, formatted `"<id> <issued YYYY-MM-DD> <total> <status>"` (total formatted with `money.fmt`), followed by a final line `"Balance: <sum of the balances of open invoices>"`. Lines are joined with newlines.
+editable: ["billing/**", "tests/**"]

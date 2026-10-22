@@ -1,0 +1,9 @@
+id: ingest-05
+repo: ingest
+family: D
+lessons: [ingest.registry-quarantine]
+author: Ruth
+branch: ruth/pinecrest-feed
+prompt: |
+  Add a feed for Pinecrest's orders in ingest/feeds/pinecrest.py. Their CSV has columns order_ref,sku,qty,total,order_date with ISO dates (`2026-09-30`). The feed name is "pinecrest", and `python -m ingest.cli pinecrest <file>` should work.
+editable: ["ingest/**", "tests/**"]

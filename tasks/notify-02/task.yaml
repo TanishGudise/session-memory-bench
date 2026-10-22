@@ -1,0 +1,9 @@
+id: notify-02
+repo: notify
+family: M
+lessons: [notify.sms-480]
+author: Omar
+branch: omar/delivery-window-sms
+prompt: |
+  When we know the delivery window for an order, we want to text the customer. Add `send_delivery_window_sms(provider, user, order)` in notify/orders.py. `order` is a dict with `id`, `window` (e.g. "tomorrow 9-11am"), `items` (item names) and `tracking_url`. The text is `Your order <id> arrives <window>: <item names joined by ", ">. Track: <tracking_url>`. Return the provider message id.
+editable: ["notify/**", "tests/**"]
