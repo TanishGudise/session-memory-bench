@@ -231,3 +231,13 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
      - paid stages run on AC power, with the lid open and system sleep prevented (`caffeinate -s`); paid stages refuse to start on battery.
    - Calls that return are unaffected.
 5. **Re-freeze.** The experiment is frozen again after this amendment (`scripts/manifest.py --freeze`; `FROZEN` holds the hash). The rest of the history stage, the full-corpus freeze and the main run all run under it.
+
+### Amendment 2 — 2026-10-23, full corpus frozen, before the main run
+
+- **Corpus.** `run1`, all four repos: sha256 `9b4cdf34eeff02283737296a3e3956b6fa0a48f178ee2022d1c6563f464bf9ea`.
+  - 26 sessions, 4 chat messages, 505 chunks and 183 distilled notes, hand-labelled by the rule in Amendment 1 item 3.
+  - Raw blocks: billing 34,076 tokens, ingest 35,381, inventory 28,872 and notify 29,576. Every session fits under the 40k cap.
+- **Discarded history draws.** One: inventory-H4 attempt 1, interrupted while the host slept (Amendment 1 item 4). Attempt 2 is the kept draw.
+- **Allowed leak.** The leakage check flagged one string from ingest-01's reference solution: `"external_id": row["shipment_id"],`. It is allowed, through `amendments/allowed_leaks_run1.json`, which is part of the corpus hash.
+  - It is in the ingest-H1 transcript because that session's agent read `scripts/backfill_kestrel.py`, which was in the repo at the time.
+  - It only maps a CSV column that ingest-01's prompt names (`shipment_id`) to the schema's `external_id` field. It carries nothing about the task's lesson (Kestrel times are Europe/Berlin local time), and no hidden lesson test depends on it.
