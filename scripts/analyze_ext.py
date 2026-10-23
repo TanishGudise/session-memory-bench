@@ -106,12 +106,13 @@ def main() -> int:
     # and a random 10% (seed 0) of the rest
     listed = {r["episode"] for r in sc if r["condition"] == "a" and r["score"] == 1}
     listed |= {r["episode"] for r in sc if r["condition"] in MEMORY and outcome(r) == "old_rule"}
-    listed |= {r["episode"] for r in rows if r.get("suspicious") or r.get("grade_status") not in (None, "graded", "collection_error")}
+    odd = {r["episode"] for r in rows if r.get("suspicious") or r.get("grade_status") != "graded" or r not in sc}
+    listed |= odd
     rest = sorted(r["episode"] for r in sc if r["episode"] not in listed)
     res["hand_check"] = {
         "a_passes": sorted(r["episode"] for r in sc if r["condition"] == "a" and r["score"] == 1),
         "memory_old_rule": sorted(r["episode"] for r in sc if r["condition"] in MEMORY and outcome(r) == "old_rule"),
-        "flagged_or_ungraded": sorted(r["episode"] for r in rows if r.get("suspicious") or r.get("grade_status") not in (None, "graded", "collection_error")),
+        "flagged_or_ungraded": sorted(odd),
         "random_10pct_seed0": sorted(random.Random(0).sample(rest, k=max(1, len(rest) // 10))) if rest else [],
     }
     (run / "analysis_ext.json").write_text(json.dumps(res, indent=2, default=str))

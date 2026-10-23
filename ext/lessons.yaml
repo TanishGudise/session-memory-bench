@@ -4,8 +4,8 @@ inventory.bramblecote-cases-12:
   kind: invisible
   source: [chat-ops-1005]
   spans:
-    chat-ops-1005: ["Bramblecote's new ASNs (from this week) count cases of 12 units, not 6"]
-  note: "Since 2026-10-05 Bramblecote's ASN quantities are cases of 12 units (was 6); multiply them by 12 when receiving."
+    chat-ops-1005: ["Bramblecote now counts ASN quantities in cases of 12 units, not 6"]
+  note: "Since 2026-10-05 Bramblecote counts ASN quantities in cases of 12 units (was 6); multiply them by 12 when receiving."
   patterns: ["cases of 12", "by 12"]
   evidence: ["Bramblecote", "cases? of 12", "12 units"]
 billing.no-dunning-under-5:

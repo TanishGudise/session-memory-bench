@@ -4,7 +4,7 @@ Registered 2026-10-23, after the main run and before any model call for this add
 
 ## 1. Question
 
-In the main run, every stale task showed the change in the code the agent read (238 of 240 S episodes saw it), and no memory condition caused harm. This addendum asks the case the main run couldn't: **when a rule changed only in a later chat message, and the code doesn't show the change, does memory deliver the latest decision or the stale one?** Harm here means following the old rule.
+In the main run, every stale task showed the change in the code the agent read (238 of 240 S episodes saw it); no harm was detected, and no episode followed the old rule. This addendum asks the case the main run couldn't: **when a rule changed only in a later chat message, and the code doesn't show the change, does memory deliver the latest decision or the stale one?** Harm here means following the old rule.
 
 ## 2. Material
 
@@ -21,8 +21,8 @@ Five S-i tasks in `ext/tasks/`. Each reuses a main M task's prompt and functiona
 - **Invisible.** Main's code shows neither rule. `scripts/validate_ext.py` checks each new lesson's `evidence` patterns against main's files and finds none. The new values are not common defaults.
 - **Tests.**
   - `func`: the base task's functional tests. inventory-i2 uses SFO only, so its functional tests don't depend on either rule.
-  - `lesson`: the new rule.
-  - `diag`: passes only for the old rule.
+  - `lesson`: the new rule. billing-i2 also keeps billing-04's two idempotency lesson tests, so its pass needs idempotency too; in the main run, 30 of 30 billing-04 episodes passed the repeated-call test and 29 of 30 the timeout test.
+  - `diag`: passes only for the old rule (its own boundaries and threshold). Test dates fall after the change, so applying the new rule from its stated date counts as the new rule.
   - A pass needs every func and lesson test to pass, and the episode to have finished, as in the main run.
 - **Solutions.**
   - `oracle`: the base task's reference solution with the new value.
@@ -35,7 +35,7 @@ Five S-i tasks in `ext/tasks/`. Each reuses a main M task's prompt and functiona
 
 ## 3. Conditions and budgets
 
-The same six conditions, agent, tools, model (`claude-haiku-5-5`) and per-episode budgets as the main run. g's note is the new lesson only. **10 epochs**: 5 tasks × 6 conditions × 10 = 300 episodes. Stage `ext`, capped at **$3.00** (expected about $1.20). Paid stages run on AC power with the lid open (Amendment 1 item 4 of the main preregistration).
+The same six conditions, agent, tools, model (`claude-haiku-5-5`) and per-episode budgets as the main run. g's notes are the task's current lessons: the new rule, plus billing.gateway-idempotency for billing-i2. **10 epochs**: 5 tasks × 6 conditions × 10 = 300 episodes. Stage `ext`, capped at **$3.00** (expected about $1.20). Paid stages run on AC power with the lid open (Amendment 1 item 4 of the main preregistration).
 
 ## 4. Gates
 

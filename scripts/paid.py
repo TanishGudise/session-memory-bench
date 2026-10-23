@@ -185,6 +185,12 @@ def cmd_eval(a, s: Session):
     corpus_dir = RUNS / "history" / a.corpus
     run_dir = RUNS / "eval" / a.run
     cm, blobs = load_frozen(corpus_dir)
+    if a.stage == "ext":  # an extension run on a corpus without the extension's chat would be invalid (checked before any write)
+        import yaml
+        have = {c.source for c in corpus_mod.loads(blobs["chunks.jsonl"].decode())}
+        want = {m["id"] for m in yaml.safe_load((ROOT / "ext" / "chat.yaml").read_text())["messages"]}
+        if not want <= have:
+            raise SystemExit(f"corpus {a.corpus} lacks the extension chat {sorted(want - have)}")
     corpus_sha = cm["sha256"]
     if a.stage in ("main", "sonnet", "ext") and cm["repos"] != ["billing", "ingest", "inventory", "notify"]:
         raise SystemExit("the main, Sonnet and ext stages need the corpus of all four repos frozen")

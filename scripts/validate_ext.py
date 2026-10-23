@@ -75,6 +75,9 @@ def main() -> int:
     errors: list = []
     report = {"registry": registry(errors), "invisible": invisible(errors),
               "solutions": validate.solution_matrix(errors, a.repeats, a.workers), "leakage": validate.leakage(errors)}
+    for key, cell in report["solutions"].items():
+        if key.endswith("/visible_only"):
+            validate.check(not cell["diag_pass"], f"{key}: a solution with no rule must not fire the old-rule diagnostic", errors)
     report["errors"] = errors
     (ROOT / "validation").mkdir(exist_ok=True)
     (ROOT / "validation" / "report_ext.json").write_text(json.dumps(report, indent=2, default=str))

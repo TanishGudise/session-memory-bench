@@ -59,7 +59,7 @@ def test_lesson_timeout_after_gateway_processed_refunds_once():
 
 
 def test_diag_old_500_threshold():
-    s, gw = _setup()
-    refund_invoice(s, gw, "inv_1", 30000, requested_by="ana")  # the old rule needs no approver up to $500.00
+    s, gw = _setup(200000)
+    refund_invoice(s, gw, "inv_1", 50000, requested_by="ana")  # the old rule needs no approver up to $500.00
     with pytest.raises(Exception):
         refund_invoice(s, gw, "inv_1", 50001, requested_by="ana")

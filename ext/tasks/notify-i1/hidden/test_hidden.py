@@ -10,7 +10,7 @@ def _u(i, n, tz, **kw):
 
 
 def _at(h, m=0):
-    return datetime(2026, 10, 5, h, m, tzinfo=timezone.utc)
+    return datetime(2026, 10, 20, h, m, tzinfo=timezone.utc)
 
 
 def test_func_daytime_send():
@@ -36,11 +36,13 @@ def test_lesson_quiet_hours_boundaries():
     assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(16, 59)) == []      # 09:59 local
     sh = [_u("sh", 2, "Asia/Shanghai")]
     assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 59)) == ["sh"]  # 20:59 local
-    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(13, 0)) == []       # 21:00 local
+    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(13, 30)) == []      # 21:30 local
 
 
-def test_diag_old_quiet_hours():
+def test_diag_old_quiet_hours():  # the old rule's own boundaries: 09:00 sends, 08:59 doesn't, 19:59 sends, 20:00 doesn't
     la = [_u("la", 1, "America/Los_Angeles")]
-    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(16, 30)) == ["la"]  # 09:30 local: the old rule sends
+    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(16, 0)) == ["la"]
+    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(15, 59)) == []
     sh = [_u("sh", 2, "Asia/Shanghai")]
-    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 30)) == []      # 20:30 local: the old rule holds it
+    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(11, 59)) == ["sh"]
+    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 0)) == []

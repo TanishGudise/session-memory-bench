@@ -7,7 +7,7 @@ messages:
     author: Kenji
     lessons: [inventory.bramblecote-cases-12]
     text: |
-      Heads-up from receiving: Bramblecote's new ASNs (from this week) count cases of 12 units, not 6. Anything that books Bramblecote ASNs has to multiply their quantities by 12.
+      Heads-up from receiving: Bramblecote now counts ASN quantities in cases of 12 units, not 6. Anything that books Bramblecote ASNs has to multiply their quantities by 12.
   - id: chat-support-1006
     date: 2026-10-06
     channel: "#support"
