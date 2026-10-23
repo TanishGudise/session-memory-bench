@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from smb.grade import SUSPICIOUS, TRIPWIRE  # noqa: E402
 from smb.memory.corpus import lessons  # noqa: E402
 from smb.memory.provider import CONDITIONS  # noqa: E402
 from smb.stats import cluster_bootstrap_diff, holm, mcnemar_exact, wilson  # noqa: E402
@@ -169,10 +171,27 @@ def main() -> int:
     res["saturated"] = bool(mc is not None and mg is not None and mc >= 0.9 and mg >= 0.9)
     res["flagged_suspicious"] = [r["episode"] for r in rows if r.get("suspicious")]
     # G4: every one of these is hand-checked before the results are reported
+    by_key = {(r["task"], r["epoch"], r["condition"]): r for r in scored(rows)}
+    s_disagree = sorted({f"{t}__e{e}" for (t, e, c), r in by_key.items() if c == "a" and r["family"] in ("S-u", "S-s")
+                         and (t, e, "c") in by_key and by_key[(t, e, "c")]["score"] != r["score"]})
+    flagged = [r["episode"] for r in rows if r.get("suspicious")]
+    listed = set(flagged) | {r["episode"] for r in rows if r.get("grade_status") not in (None, "graded", "collection_error")}
+    rest = sorted(r["episode"] for r in rows if r["episode"] not in listed)
+    sample = sorted(random.Random(0).sample(rest, k=max(1, len(rest) // 10))) if rest else []
+    tokens = defaultdict(list)
+    for r in rows:
+        for line in r.get("suspicious") or []:
+            m = (SUSPICIOUS.search(line) or TRIPWIRE.search(line))
+            tokens[m.group(0).lower() if m else "?"].append(f"{r['episode']}: {line}")
     res["hand_check"] = {
         "tampered": [r["episode"] for r in rows if r.get("grade_status") == "tampered"],
+        "junit_mismatch_or_no_junit": [r["episode"] for r in rows if r.get("grade_status") in ("junit_mismatch", "no_junit")],
         "grader_timeouts": [r["episode"] for r in rows if r.get("grade_status") == "timeout"],
+        "flagged": flagged,
+        "flagged_lines_by_token": {k: v for k, v in sorted(tokens.items())},
         "a_passes_on_M": [r["episode"] for r in scored(rows) if r["condition"] == "a" and r["family"] == "M" and r["score"] == 1],
+        "S_tasks_a_vs_c_disagree": s_disagree,
+        "random_10pct_seed0": sample,
     }
     (run / "analysis.json").write_text(json.dumps(res, indent=2, default=str))
     lines = ["| cond | " + " | ".join(FAMS) + " | all |", "|---" * (len(FAMS) + 2) + "|"]

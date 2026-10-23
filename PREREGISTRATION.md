@@ -37,8 +37,11 @@ Registered 2026-10-22, before any model call. Changes after the first model call
   - Hidden tests run in a separate sandboxed process with no network. That process can write only in its grading directory, and it cannot read file contents anywhere under the home directory (including the benchmark, its git history and other workspaces) or in the shared temp directories (`/private/tmp`, `/private/var/tmp`, `/private/var/folders`). The exceptions are its own directory and the project's Python environment.
   - The JUnit test set must equal the hidden file's test set exactly.
   - Every run also includes tests that must fail: one per assertion helper (TypeScript), and a plain `assert` plus `pytest.raises` (Python). If any of them passes, something patched the assertions or the runner; the episode is marked tampered, scores 0, and is hand-checked.
-  - The output must end with exactly one runner summary, which must agree with the JUnit report: pytest's single summary line, or node's final TAP summary block. The output keeps its head and its tail. Otherwise the run is marked `junit_mismatch` and scores 0, and a report that can't be parsed is `no_junit`.
-  - Candidate code is flagged and hand-checked when an added line matches static patterns for the test machinery (the report, argv, assertion modules, dunder tricks), or mentions tests, summaries, exit hooks, threads, directory listings or the parent directory. A determined candidate could still forge a run; that residual risk is stated in section 7.
+  - The runner's summary must agree with the JUnit report, or the run is marked `junit_mismatch` and scores 0. The output keeps its head and its tail.
+    - pytest: exactly one line in the whole output must fully match pytest's summary format (counts, then "in N s"), and it must be the last line.
+    - node: the output must end with node's TAP summary block (tests, suites, pass, fail, cancelled, skipped, todo, duration_ms).
+  - A report that can't be read or parsed is `no_junit` and scores 0.
+  - Candidate code is flagged and hand-checked when an added line matches the static patterns in `smb/grade.py`. `SUSPICIOUS` covers the test machinery: the report, argv, assertion modules and dunder tricks. `TRIPWIRE` covers the words test, junit, argv, summary, weakref, finalize, threading, `_thread`, listdir, scandir, glob, iterdir, `walk(`, readdir and the parent directory. A determined candidate could still forge a run; that residual risk is stated in section 7.
   - Graders run with `TZ=America/Los_Angeles`. A grading run that times out is retried once with twice the time.
 
 ## 2. Conditions
@@ -62,7 +65,8 @@ Same model, system prompt, task prompt, tools and budgets in every condition; on
   - Agent mistakes go back to the agent as error results. That covers unknown tools, bad arguments, bad or non-regular paths, bad regular expressions, a search running longer than 10 seconds, and files or directories the agent's own code made unreadable (which are skipped). A failure of the harness itself, such as the retriever or the test sandbox failing to start, ends the episode as a harness error.
   - The file tools run on the host, inside the workspace only, and never follow or list symbolic links, even ones that point inside the workspace.
   - Every open walks directory file descriptors with `O_NOFOLLOW`, so a path swapped for a link between two calls is not followed either.
-  - Files over 1 MB are refused by `read_file` and skipped by searches and by the grader's snapshot. Entries more than 64 directories deep are skipped. The snapshot takes only the task's editable files, at most 20 MB in total.
+  - Files over 1 MB are refused by `read_file` and skipped by searches and by the grader's snapshot. Entries more than 64 directories deep are skipped.
+  - The snapshot takes only the task's editable files. If they exceed 20 MB in total, the episode ends as a harness error rather than being graded on part of its files.
   - `search_code` runs its regex in a sandboxed child process that receives the file contents, with a 10-second deadline.
   - After each run, a process is killed (best effort) if it is sandboxed, started after the run's directory was created, and still has its working directory or an open file there. This catches processes that runs left behind outside their process group. Unsandboxed processes are never touched. Sandboxed code can signal only processes in its own sandbox.
 - **Per episode.**

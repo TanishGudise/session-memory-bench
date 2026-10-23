@@ -95,6 +95,10 @@ def parse_junit(path: Path) -> dict[str, str]:
     return out
 
 
+PYTEST_SUMMARY = re.compile(r"(\d+ (passed|failed|skipped|deselected|xfailed|xpassed|warnings?|errors?|rerun)(, )?)+"
+                            r" in [\d.]+s( \(\d+:\d\d:\d\d\))?")
+
+
 def _summary_agrees(lang: str, output: str, tests: dict[str, str]) -> bool:
     """The runner's own printed summary must match the JUnit counts (a report written by candidate code at import
     or at exit can't also change what the runner already printed)."""
@@ -104,7 +108,7 @@ def _summary_agrees(lang: str, output: str, tests: dict[str, str]) -> bool:
         return False
     lines = [l for l in output.strip().splitlines() if l.strip()]
     if lang == "py":
-        summary = [l for l in lines if re.search(r"\d+ (passed|failed)", l) and " in " in l]
+        summary = [l for l in lines if PYTEST_SUMMARY.fullmatch(l.strip().strip("= ").strip())]
         # exactly one summary-shaped line, and it is the last line: a summary printed later (at exit) can't win
         if len(summary) != 1 or not lines or lines[-1] != summary[0]:
             return False
@@ -153,7 +157,7 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
                   "seconds": round(res.seconds, 2), "score": 0}
         try:
             tests = parse_junit(junit) if junit.exists() else {}
-        except ET.ParseError:  # a report something corrupted: never graded
+        except (ET.ParseError, OSError, ValueError, LookupError):  # a report something corrupted: never graded
             tests, junit_bad = {}, True
         else:
             junit_bad = False
@@ -192,8 +196,8 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
 
 # Broad tripwire on top of SUSPICIOUS: candidate source (not its tests) that mentions test machinery, process
 # exit hooks, directory listing or the parent directory gets a hand check, whatever it does.
-TRIPWIRE = re.compile(r"(?<![.\w])test|junit|argv|summary|weakref|finalize|__del__|threading|dup2|listdir|scandir|glob"
-                      r"|[\"']\.\.[\"'/]|\.\./", re.I)
+TRIPWIRE = re.compile(r"(?<![.\w])test|junit|argv|summary|weakref|finalize|__del__|threading|_thread|dup2|listdir|scandir"
+                      r"|\bglob\b|iterdir|\bwalk\(|readdir|[\"']\.\.[\"'/]|\.\./", re.I)
 
 
 def suspicious(task: Task, workspace: dict[str, bytes]) -> list[str]:

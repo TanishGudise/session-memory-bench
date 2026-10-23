@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import os
 import shutil
 import uuid
@@ -79,3 +80,52 @@ def test_manifest_hash_is_recomputed(tmp_path):
     (tmp_path / "CORPUS_MANIFEST.json").write_text(json.dumps(m))
     with pytest.raises(SystemExit):
         verify(tmp_path)
+
+
+def test_summary_rule():
+    from smb.grade import _summary_agrees
+    tests = {"a": "pass", "b": "fail", "c": "pass"}
+    real = "..F\nFAILED x::b\n1 failed, 2 passed in 0.03s"
+    assert _summary_agrees("py", real, tests)
+    assert not _summary_agrees("py", real + "\n1 failed, 2 passed in 0.03s", tests)       # a second summary printed later
+    assert not _summary_agrees("py", real + "\nall good", tests)                           # summary not last
+    honest_log = "WARNING notify.sms:sms.py:12 attempt 2 failed in send_sms_with_retry; retrying in 2s\n" + real
+    assert _summary_agrees("py", honest_log, tests)                                        # a log line is not a summary
+    assert _summary_agrees("py", "..F\n1 failed, 2 passed, 3 warnings in 65.10s (0:01:05)", tests)
+    assert _summary_agrees("py", "== 1 failed, 2 passed in 0.03s ==", tests)
+
+
+def test_snapshot_budget_is_reported(tmp_path):
+    from smb import tools
+    ws = Workspace(tmp_path, "py")
+    (tmp_path / "pkg").mkdir()
+    for i in range(3):
+        (tmp_path / "pkg" / f"f{i}.py").write_text("x" * 600)
+    old = tools.MAX_SNAPSHOT_BYTES
+    tools.MAX_SNAPSHOT_BYTES = 1000
+    try:
+        snap = ws.files()
+        assert len(snap) == 1 and ws.skipped == 2
+    finally:
+        tools.MAX_SNAPSHOT_BYTES = old
+
+
+def test_analysis_runs_on_a_small_result_set(tmp_path):
+    import subprocess
+    import sys
+    rows = []
+    for task, fam in (("billing-03", "M"), ("billing-06", "S-s")):
+        for cond in ("a", "b", "c", "d", "f", "g"):
+            for e in (1, 2):
+                rows.append({"episode": f"{task}__{cond}__e{e}", "task": task, "family": fam, "condition": cond, "epoch": e,
+                             "stop": "finished", "score": int(cond != "a"), "grade_status": "graded",
+                             "tests": {"test_lesson_x": "pass" if cond != "a" else "fail"}, "diag": {}, "lessons": [],
+                             "stale_lessons": [], "retrieved": [], "memory_sources": [], "usage": {}, "cost": 0.0,
+                             "calls": 1, "reads_before_first_edit": 0, "seconds": 1.0, "memory_chars": 0,
+                             "search_queries": [], "suspicious": []})
+    (tmp_path / "results.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    r = subprocess.run([sys.executable, "scripts/analyze.py", str(tmp_path)], capture_output=True, text=True,
+                       cwd=Path(__file__).resolve().parents[1])
+    assert r.returncode == 0, r.stderr[-1500:]
+    out = json.loads((tmp_path / "analysis.json").read_text())
+    assert "random_10pct_seed0" in out["hand_check"] and out["family_A_benefit_M"]["A1"]["pairs"] == 2

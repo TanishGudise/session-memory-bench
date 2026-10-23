@@ -54,6 +54,8 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
             stop = f"error: {type(exc).__name__}: {exc}"[:300]
         try:
             files = ws.files(keep=task.is_editable)
+            if ws.skipped:  # never grade a partial snapshot
+                stop, files = f"error: snapshot over budget ({ws.skipped} files left out)", None
         except Exception as exc:  # noqa: BLE001 - a workspace the harness can't snapshot is a harness error
             stop, files = f"error: snapshot {type(exc).__name__}: {exc}"[:300], None
         grade = grade_workspace(task, files, label=cond) if stop in FINAL_STOPS and files is not None else None
