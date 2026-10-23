@@ -221,3 +221,7 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
      - An episode *saw* the change when one of those strings appears in what `list_dir`, `read_file`, `search_code` or `run_tests` returned to the agent. `search_memory` results don't count.
      - Reported per condition and task: episodes that saw the change, pass rates when it was seen and when it wasn't, and old-rule follows (a `diag` test passing). This explains a harm result or its absence; it is not a test.
 3. **Note labels (section 5), as applied.** A note is labelled with a lesson only if it states that lesson's rule. Mentions, hints and process notes stay unlabelled. The pilot's 50 billing notes were labelled this way, and the other repos' notes will be too.
+4. **Hard per-call deadline (harness).**
+   - During the other repos' history stage, one model request (inventory-H4, attempt 1) blocked in a socket read for about 50 minutes; its 180-second HTTP read timeout never fired. The process was interrupted, and the attempt is recorded as discarded (`error: KeyboardInterrupt`).
+   - That request never returned usage, so the ledger has no entry for it. Its cost (a fraction of a cent at most) is not in the booked spend.
+   - From now on, a request that hasn't returned 120 seconds after its own timeout is abandoned, booked at its worst case, and retried as a transient error (same 3 attempts). Calls that return are unaffected.
