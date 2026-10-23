@@ -1,6 +1,6 @@
 {
  "files": {
-  "PREREGISTRATION.md": "85bb60de49e3673de3e30068df4247dd581eb25218c44ed3c703bdd454791a54",
+  "PREREGISTRATION.md": "7f91e7dc76f4a44d9af614b8160a9697ca27216399a43cb031bc4ae9284f39eb",
   "history/billing.yaml": "d546cd360b8b2b2e595b09fe39b3664919526dd4f00a3948bb76054ee9f7ca88",
   "history/chat.yaml": "caa5a1a8a75a37b680dfd868d9a7dbbd027ec7dbf815978eb9148123460cd4e1",
   "history/checks/billing-H1/test_checks.py": "5983c1f674f12e89b0b9351ade14c517a4d5af794f4f70471cfa401a8fa628c2",
@@ -325,5 +325,5 @@
   "tasks/notify-08/solutions/oracle/notify/stats.py": "f0aa4444cc3a3fb65446fe47e120b33d9371ff473bc5f3cee15a77d1648833ed",
   "tasks/notify-08/task.yaml": "da24c93cad2eb1cfca9256e40e6d569a34ae5e7ba75eafa5a7b9a4c81ad8ab22"
  },
- "manifest_sha256": "f9cf45ab3ef047092e52c6bf8a094f943eef951926691ef62be0bd115e779b60"
+ "manifest_sha256": "38c856a4f6ceb4b09d2c4bb6ac70d7583c483871a0969f9012cfe532983db19b"
 }
