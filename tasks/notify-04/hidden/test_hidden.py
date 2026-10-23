@@ -9,7 +9,7 @@ def _send(caplog):
     caplog.set_level(logging.INFO)
     p = FakeSMSProvider()
     msg_id = send_sms(p, User(id="u-417", phone="+14155550123"), "hello")
-    records = [r for r in caplog.records if r.name == "notify.sms"]
+    records = [r for r in caplog.records if r.name == "notify.sms" and "sms_sent" in r.getMessage()]
     return p, msg_id, records
 
 

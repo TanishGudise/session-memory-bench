@@ -85,7 +85,20 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
                  ws=ws, meter=meter, transcript=tw, limits=limits or Limits())
     try:
         stop_task = ep.user_turn(spec["ticket"].strip())
-        checks = grade_workspace(task, ws.files(keep=task.is_editable), label="hist") if task.has_checks() else None
+        checks, harness_problem = None, None
+        if task.has_checks():
+            snap = ws.files(keep=task.is_editable)
+            if ws.skipped:
+                harness_problem = f"snapshot over budget ({ws.skipped} files left out)"
+            else:
+                checks = grade_workspace(task, snap, label="hist")
+                if checks["status"] not in ("graded", "collection_error"):
+                    harness_problem = f"checks not graded: {checks['status']}"
+        if harness_problem:  # never post review comments from a broken check run; keep the session out of the corpus
+            record = {"id": sid, "repo": spec["repo"], "stop_task": stop_task, "complete": False, "problem": harness_problem,
+                      "calls": ep.calls, "usage": dict(ep.usage), "cost": round(ep.cost, 6)}
+            (sess_dir / "session.partial.json").write_text(json.dumps(record, indent=2))
+            return record
         failed = {n for n, v in (checks or {}).get("tests", {}).items() if v != "pass"}
         text, posted = review_message(spec, failed)
         ep.limits = REVISION_LIMITS
@@ -93,6 +106,7 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
         record = {
             "id": sid, "repo": spec["repo"], "date": str(spec["date"]), "author": spec["author"], "branch": spec["branch"],
             "outcome": spec["outcome"], "model": model, "stop_task": stop_task, "stop_review": stop_review,
+            "checks_status": (checks or {}).get("status"),
             "checks_failed": sorted(failed), "review_posted": [{"when": r["when"], "lessons": r["lessons"]} for r in posted],
             "calls": ep.calls, "usage": dict(ep.usage), "cost": round(ep.cost, 6), "tool_counts": dict(ep.tool_counts),
             "edited": sorted(set(ws.edits)),

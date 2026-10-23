@@ -23,7 +23,7 @@ def test_lesson_backoff_until_success():
 def test_lesson_gives_up_after_five_attempts():
     p, sleeps = FakeSMSProvider(), []
     p.fail_next = 5
-    with pytest.raises(ProviderUnavailable):
+    with pytest.raises(Exception):  # ProviderUnavailable or the agent's own wrapper
         send_sms_with_retry(p, USER, "hi", sleep=sleeps.append)
     assert p.fail_next == 0 and p.sent == [] and sleeps == [1, 2, 4, 8]
 

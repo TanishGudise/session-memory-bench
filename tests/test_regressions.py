@@ -129,3 +129,21 @@ def test_analysis_runs_on_a_small_result_set(tmp_path):
     assert r.returncode == 0, r.stderr[-1500:]
     out = json.loads((tmp_path / "analysis.json").read_text())
     assert "random_10pct_seed0" in out["hand_check"] and out["family_A_benefit_M"]["A1"]["pairs"] == 2
+
+
+def test_runner_and_history_refuse_an_over_budget_snapshot(tmp_path, monkeypatch):
+    from smb import tools
+    from smb.history import run_session
+    from smb.memory.corpus import history_specs
+    from smb.runner import run_episode
+    from smb.stub import EvalStub, HistoryStub, StubClient
+    monkeypatch.setattr(tools, "MAX_SNAPSHOT_BYTES", 3000)
+    t = load("billing-03")
+    r = run_episode(t, "a", 1, StubClient(EvalStub(t)), "stub", {"none": __import__("smb.memory.provider", fromlist=["NoMemory"]).NoMemory()},
+                    tmp_path / "run", None)
+    assert r["stop"].startswith("error: snapshot over budget") and r["score"] is None
+    spec = history_specs()["billing-H1"]
+    rec = run_session("billing-H1", StubClient(HistoryStub({**spec, "id": "billing-H1"})), "stub", tmp_path / "hist")
+    assert rec["complete"] is False and "over budget" in rec["problem"]
+    assert (tmp_path / "hist" / "billing-H1" / "session.partial.json").exists()
+    assert not (tmp_path / "hist" / "billing-H1" / "session.json").exists()

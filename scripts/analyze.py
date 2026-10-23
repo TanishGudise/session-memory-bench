@@ -176,13 +176,16 @@ def main() -> int:
                          and (t, e, "c") in by_key and by_key[(t, e, "c")]["score"] != r["score"]})
     flagged = [r["episode"] for r in rows if r.get("suspicious")]
     listed = set(flagged) | {r["episode"] for r in rows if r.get("grade_status") not in (None, "graded", "collection_error")}
-    rest = sorted(r["episode"] for r in rows if r["episode"] not in listed)
+    listed |= set(s_disagree) | {r["episode"] for r in scored(rows) if r["condition"] == "a" and r["family"] == "M" and r["score"] == 1}
+    listed |= {r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)}
+    rest = sorted(r["episode"] for r in scored(rows) if r["episode"] not in listed)
     sample = sorted(random.Random(0).sample(rest, k=max(1, len(rest) // 10))) if rest else []
     tokens = defaultdict(list)
     for r in rows:
         for line in r.get("suspicious") or []:
-            m = (SUSPICIOUS.search(line) or TRIPWIRE.search(line))
-            tokens[m.group(0).lower() if m else "?"].append(f"{r['episode']}: {line}")
+            content = line.split(": ", 1)[-1]  # the matched code, not the file name
+            hits = sorted({m.group(0).lower() for rx in (SUSPICIOUS, TRIPWIRE) for m in rx.finditer(content)}) or ["?"]
+            tokens["+".join(hits)].append(f"{r['episode']}: {line}")
     res["hand_check"] = {
         "tampered": [r["episode"] for r in rows if r.get("grade_status") == "tampered"],
         "junit_mismatch_or_no_junit": [r["episode"] for r in rows if r.get("grade_status") in ("junit_mismatch", "no_junit")],
