@@ -1,0 +1,30 @@
+# Team chat messages that memory ingests next to the sessions.
+messages:
+  - id: chat-billing-0908
+    date: 2026-09-08
+    channel: "#billing"
+    author: Priya
+    lessons: [billing.refund-second-approver]
+    text: |
+      Reminder from the SOC 2 audit: refunds over $500.00 need a second approver, and the approver can't be the person who requested the refund. This applies to anything new that issues refunds.
+  - id: chat-brand-0902
+    date: 2026-09-02
+    channel: "#brand"
+    author: Lena
+    lessons: [notify.formal-german]
+    text: |
+      Decision from the brand review: all German-language customer communication uses the formal (Sie) templates, locale key de-formal. The informal de templates are legacy and must not be used for anything new.
+  - id: chat-ops-0909
+    date: 2026-09-09
+    channel: "#ops"
+    author: Rosa
+    lessons: [inventory.rno-returns-only]
+    text: |
+      Reminder: RNO (Reno) is a returns-only location. Never allocate customer orders from RNO stock, even when it has the most units.
+  - id: chat-eng-0915
+    date: 2026-09-15
+    channel: "#eng"
+    author: Sam
+    lessons: []
+    text: |
+      CI is moving to the new runners on Thursday; expect slower first builds while caches warm up.

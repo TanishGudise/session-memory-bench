@@ -1,0 +1,1022 @@
+{
+  "errors": [],
+  "evidence": {
+    "billing.expand-contract": [],
+    "billing.no-dunning-under-1": [],
+    "billing.refund-second-approver": [],
+    "billing.settlement-tz-flake": [],
+    "ingest.dedupe-source-external-id": [],
+    "ingest.dmy-dates": [],
+    "ingest.kestrel-berlin-time": [],
+    "inventory.brightline-cases": [],
+    "inventory.hold-expiry-15m": [],
+    "inventory.rno-returns-only": [],
+    "notify.formal-german": [],
+    "notify.quiet-hours": [],
+    "notify.sms-480": []
+  },
+  "history": {
+    "billing-H1": {
+      "ref": 1,
+      "start": 0,
+      "start_visible": 0
+    },
+    "billing-H2": {
+      "start_visible": 0
+    },
+    "billing-H3": {
+      "ref": 1,
+      "start": 1,
+      "start_visible": 0
+    },
+    "billing-H4": {
+      "start_visible": 0
+    },
+    "billing-H5": {
+      "ref": 1,
+      "start": 0,
+      "start_visible": 0
+    },
+    "billing-H6": {
+      "start_visible": 0
+    },
+    "billing-H7": {
+      "start_visible": 0
+    },
+    "ingest-H1": {
+      "start_visible": 0
+    },
+    "ingest-H2": {
+      "start_visible": 0
+    },
+    "ingest-H3": {
+      "ref": 1,
+      "start": 0,
+      "start_visible": 0
+    },
+    "ingest-H4": {
+      "start_visible": 0
+    },
+    "ingest-H5": {
+      "start_visible": 0
+    },
+    "ingest-H6": {
+      "start_visible": 0
+    },
+    "ingest-H7": {
+      "start_visible": 0
+    },
+    "inventory-H1": {
+      "start_visible": 0
+    },
+    "inventory-H2": {
+      "start_visible": 0
+    },
+    "inventory-H3": {
+      "ref": 1,
+      "start": 0,
+      "start_visible": 0
+    },
+    "inventory-H4": {
+      "start_visible": 0
+    },
+    "inventory-H5": {
+      "start_visible": 0
+    },
+    "inventory-H6": {
+      "start_visible": 0
+    },
+    "notify-H1": {
+      "start_visible": 0
+    },
+    "notify-H2": {
+      "start_visible": 0
+    },
+    "notify-H3": {
+      "ref": 1,
+      "start": 0,
+      "start_visible": 0
+    },
+    "notify-H4": {
+      "start_visible": 0
+    },
+    "notify-H5": {
+      "ref": 1,
+      "start": 0,
+      "start_visible": 0
+    },
+    "notify-H6": {
+      "start_visible": 0
+    }
+  },
+  "leakage": {
+    "billing-01": [],
+    "billing-02": [],
+    "billing-03": [],
+    "billing-04": [],
+    "billing-05": [],
+    "billing-06": [],
+    "billing-07": [],
+    "billing-08": [],
+    "ingest-01": [],
+    "ingest-02": [],
+    "ingest-03": [],
+    "ingest-04": [],
+    "ingest-05": [],
+    "ingest-06": [],
+    "ingest-07": [],
+    "ingest-08": [],
+    "inventory-01": [],
+    "inventory-02": [],
+    "inventory-03": [],
+    "inventory-04": [],
+    "inventory-05": [],
+    "inventory-06": [],
+    "inventory-07": [],
+    "inventory-08": [],
+    "notify-01": [],
+    "notify-02": [],
+    "notify-03": [],
+    "notify-04": [],
+    "notify-05": [],
+    "notify-06": [],
+    "notify-07": [],
+    "notify-08": []
+  },
+  "registry": {
+    "chat": 4,
+    "families": {
+      "C": 4,
+      "D": 4,
+      "M": 14,
+      "S-s": 4,
+      "S-u": 4,
+      "X": 2
+    },
+    "lessons": 37,
+    "sessions": 26,
+    "tasks": 32
+  },
+  "solutions": {
+    "billing-01/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded"
+    },
+    "billing-01/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-01/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-02/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-02/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-02/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-03/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-03/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-03/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-04/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-04/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-04/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-05/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-05/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-05/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-06/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-06/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-06/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-07/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-07/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-07/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "billing-08/noop": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "billing-08/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-01/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "ingest-01/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-01/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-02/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded"
+    },
+    "ingest-02/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-02/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-03/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "ingest-03/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-03/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-04/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "ingest-04/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-04/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-05/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded"
+    },
+    "ingest-05/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-05/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-06/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "ingest-06/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-06/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-07/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "ingest-07/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-07/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-08/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "ingest-08/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "ingest-08/other_repo": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-01/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-01/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-01/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-02/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-02/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-02/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-03/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-03/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-03/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-04/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-04/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-04/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-05/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-05/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-05/other_repo": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-06/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-06/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-06/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-07/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-07/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-07/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "inventory-08/noop": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "inventory-08/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-01/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-01/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-01/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-02/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-02/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-02/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-03/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-03/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-03/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-04/noop": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded"
+    },
+    "notify-04/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-04/visible_only": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-05/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-05/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-05/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-06/noop": {
+      "diag_pass": false,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-06/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-06/stale_rule": {
+      "diag_pass": true,
+      "lesson_fail": true,
+      "repeats": 5,
+      "score": 0,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-07/noop": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-07/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    },
+    "notify-08/noop": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 0,
+      "status": "collection_error"
+    },
+    "notify-08/oracle": {
+      "diag_pass": false,
+      "lesson_fail": false,
+      "repeats": 5,
+      "score": 1,
+      "status": "graded",
+      "visible_utc": 0
+    }
+  },
+  "stub_e2e": {
+    "episodes": 192,
+    "table": {
+      "a/C": [
+        4,
+        4
+      ],
+      "a/D": [
+        0,
+        4
+      ],
+      "a/M": [
+        0,
+        14
+      ],
+      "a/S-s": [
+        4,
+        4
+      ],
+      "a/S-u": [
+        4,
+        4
+      ],
+      "a/X": [
+        2,
+        2
+      ],
+      "b/C": [
+        4,
+        4
+      ],
+      "b/D": [
+        4,
+        4
+      ],
+      "b/M": [
+        14,
+        14
+      ],
+      "b/S-s": [
+        4,
+        4
+      ],
+      "b/S-u": [
+        0,
+        4
+      ],
+      "b/X": [
+        2,
+        2
+      ],
+      "c/C": [
+        4,
+        4
+      ],
+      "c/D": [
+        3,
+        4
+      ],
+      "c/M": [
+        11,
+        14
+      ],
+      "c/S-s": [
+        3,
+        4
+      ],
+      "c/S-u": [
+        0,
+        4
+      ],
+      "c/X": [
+        2,
+        2
+      ],
+      "d/C": [
+        4,
+        4
+      ],
+      "d/D": [
+        4,
+        4
+      ],
+      "d/M": [
+        11,
+        14
+      ],
+      "d/S-s": [
+        4,
+        4
+      ],
+      "d/S-u": [
+        0,
+        4
+      ],
+      "d/X": [
+        2,
+        2
+      ],
+      "f/C": [
+        4,
+        4
+      ],
+      "f/D": [
+        3,
+        4
+      ],
+      "f/M": [
+        11,
+        14
+      ],
+      "f/S-s": [
+        3,
+        4
+      ],
+      "f/S-u": [
+        1,
+        4
+      ],
+      "f/X": [
+        2,
+        2
+      ],
+      "g/C": [
+        4,
+        4
+      ],
+      "g/D": [
+        4,
+        4
+      ],
+      "g/M": [
+        14,
+        14
+      ],
+      "g/S-s": [
+        4,
+        4
+      ],
+      "g/S-u": [
+        4,
+        4
+      ],
+      "g/X": [
+        2,
+        2
+      ]
+    }
+  },
+  "visible": {
+    "billing/main/America/Los_Angeles": 1,
+    "billing/main/UTC": 0,
+    "ingest/main/UTC": 0,
+    "inventory/main/UTC": 0,
+    "notify/main/UTC": 0
+  }
+}

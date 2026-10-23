@@ -23,9 +23,9 @@ def test_func_daytime_send():
 
 def test_lesson_no_marketing_sms_at_night_local_time():
     p = FakeSMSProvider()
-    users = [_u("ny", 1, "America/New_York"), _u("berlin", 2, "Europe/Berlin"), _u("tokyo", 3, "Asia/Tokyo"),
+    users = [_u("ny", 1, "America/New_York"), _u("paris", 2, "Europe/Paris"), _u("tokyo", 3, "Asia/Tokyo"),
              _u("la", 4, "America/Los_Angeles"), _u("kolkata", 5, "Asia/Kolkata")]
-    # 04:30 UTC: New York 00:30, Berlin 06:30, Tokyo 13:30, Los Angeles 21:30 (previous day), Kolkata 10:00
+    # 04:30 UTC: New York 00:30, Paris 06:30, Tokyo 13:30, Los Angeles 21:30 (previous day), Kolkata 10:00
     assert send_promo_sms(p, users, "hi", _at(4, 30)) == ["tokyo", "kolkata"]
     assert len(p.sent) == 2
 

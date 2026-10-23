@@ -1,0 +1,89 @@
+repo: inventory
+editable: ["src/**", "test/**", "scripts/**"]
+sessions:
+  - id: inventory-H1
+    date: 2026-08-05
+    author: Kenji
+    branch: kenji/cart-holds
+    outcome: merged
+    ticket: |
+      Add cart holds in a new src/holds.ts: placeHold(db, sku, qty, orderId, now) puts units aside while a customer checks out (store them in db.holds), releaseHold(db, orderId) removes that order's holds and returns how many it removed, and holdsFor(db, sku) lists a SKU's holds.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [inventory.stock-get]
+        text: |
+          Use stock.get(db, sku) whenever you need a stock number; it's our one accessor for stock levels.
+      - when: always
+        lessons: [inventory.hold-expiry-15m]
+        text: |
+          Ops decided holds expire after 15 minutes (the 60-minute holds gave us phantom out-of-stocks last quarter). Anything that computes availability has to ignore holds older than 15 minutes.
+  - id: inventory-H2
+    date: 2026-08-10
+    author: Kenji
+    branch: kenji/brightline-stock-low
+    outcome: closed
+    ticket: |
+      Ops says Brightline stock looks about 6x too low after Monday's import with scripts/import_brightline.ts. Please investigate what went wrong.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [inventory.brightline-cases]
+        text: |
+          Good find. Right: Brightline's ASN quantities are cases of 6 units, not units. The import script was a one-off and we're deleting it; ops already corrected the counts by hand. Keep it in mind for when we build proper Brightline receiving: multiply their quantities by 6.
+  - id: inventory-H3
+    date: 2026-08-12
+    author: Mei
+    branch: mei/reserve
+    outcome: merged
+    ticket: |
+      Add reserve(db, sku, qty) to src/stock.ts: it reserves units for a confirmed order (db.reserved) and returns the SKU's new reserved total.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [inventory.backorders-allowed]
+        text: |
+          Backorders are allowed: if stock is short, reserve anyway and let reserved exceed on hand. Purchasing works the negatives.
+      - when: "failed:lesson: backorder allowed"
+        lessons: [inventory.backorders-allowed]
+        text: |
+          Please don't reject reservations when stock is short; backorders are allowed.
+  - id: inventory-H5
+    date: 2026-08-25
+    author: Mei
+    branch: mei/inc-450-half-booked-delivery
+    outcome: merged
+    ticket: |
+      INC-450: a delivery was half booked into SFO when a storage write failed in the middle, and we oversold the rest. Add a receive(db, warehouse, lines) in src/receiving.ts that books a delivery ([{ sku, units }]) all or nothing. Add a withTx(fn) to Db that rolls back on error, and a test hook to make a write fail.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [inventory.withtx]
+        text: |
+          Thanks. Rule since INC-450: every multi-step stock write goes through db.withTx(), so a failure halfway leaves nothing behind.
+  - id: inventory-H6
+    date: 2026-09-02
+    author: Kenji
+    branch: kenji/pick-list-labels
+    outcome: merged
+    ticket: |
+      Add skuLabel(sku, name) in a new src/labels.ts for the pick-list printer: the SKU padded to 12 characters, a space, then the product name cut to 28 characters (ending with "…" if it was cut).
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: []
+        text: |
+          LGTM.
+  - id: inventory-H4
+    date: 2026-09-16
+    author: Mei
+    branch: mei/no-backorders
+    outcome: merged
+    ticket: |
+      Ops is ending backorders. reserve() must throw an InsufficientStock error (export the class from src/stock.ts) when there isn't enough unreserved stock, and change nothing in that case.
+    ticket_lessons: [inventory.no-backorders]
+    review:
+      - when: always
+        lessons: [inventory.no-backorders]
+        text: |
+          Thanks. No backorders anywhere from now on.

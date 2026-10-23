@@ -1,0 +1,110 @@
+repo: billing
+editable: ["billing/**", "tests/**"]
+sessions:
+  - id: billing-H1
+    date: 2026-08-04
+    author: Marco
+    branch: marco/inc-412-double-charge
+    outcome: merged
+    ticket: |
+      INC-412: customer cus_8812 was charged twice for invoice inv_20931 last night. The gateway call timed out on our side, but the gateway had actually captured the charge, and collect_invoice retried and charged again. Please make collect_invoice safe to retry so this can't happen again, and add a test.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [billing.gateway-idempotency]
+        text: |
+          Thanks, this is the right fix. For the record, since it will come up again: every gateway write (charges, refunds, anything new we add) has to pass an idempotency key that is deterministic for the logical operation, built with op_key(invoice_id, op, n), and the retry has to reuse that same key. A fresh uuid4 per attempt defeats the point, because the gateway sees each retry as a new request.
+      - when: always
+        lessons: [billing.fetch-invoice-accessor]
+        text: |
+          Small thing: read invoices through store.fetch_invoice() rather than querying the tables yourself. It's the accessor we use everywhere, and it caches.
+      - when: failed:test_lesson_retry_charges_once
+        lessons: [billing.gateway-idempotency]
+        text: |
+          This still double-charges when the first attempt times out after the gateway captured the charge (FakeGateway.timeout_after_commit = 1 reproduces it). The retry has to send the same idempotency key.
+  - id: billing-H2
+    date: 2026-08-11
+    author: Priya
+    branch: priya/rename-plan-code
+    outcome: closed
+    ticket: |
+      The pricing service calls it plan_code now. Please rename invoices.plan to plan_code (schema and the Invoice model) so we match.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [billing.expand-contract]
+        text: |
+          I'm going to close this one: pricing is renaming things again next month, so let's not churn the schema now. One thing for next time, because it matters: we never rename or drop a column in a single migration. During a rolling deploy the previous app version is still running and still reads the old column, so a rename breaks it mid-deploy. Renames are expand/contract: add the new column, backfill it, have the code write both columns, and drop the old column in a later release once nothing reads it.
+  - id: billing-H3
+    date: 2026-08-14
+    author: Aiko
+    branch: aiko/settlement-cutoff-test
+    outcome: closed
+    ticket: |
+      test_settlement_cutoff fails on my laptop but CI is green. Is the settlement cutoff logic broken? Please investigate and fix whatever is wrong.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [billing.settlement-tz-flake]
+        text: |
+          Thanks for digging into this. It's the known flake: test_settlement_cutoff builds a naive datetime, so it only passes on machines whose TZ is UTC, which is how CI runs. The cutoff logic itself is correct (17:00 UTC, finance reconciles on it) and must not change. We'll fix the test on its own later; closing this one.
+      - when: failed:test_lesson_cutoff_unchanged
+        lessons: [billing.settlement-tz-flake]
+        text: |
+          Please don't change settlement.py: cutoff_utc() is right. The failure comes from the test's local-time assumption, not from the cutoff.
+  - id: billing-H4
+    date: 2026-08-20
+    author: Priya
+    branch: priya/overdue-report
+    outcome: merged
+    ticket: |
+      Finance wants an overdue report. Add overdue_invoices(store, today) to billing/reports.py: open invoices with a balance whose due date has passed, oldest due date first, each as a dict with id, customer_id, balance_cents, days_overdue and due.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [billing.no-dunning-under-1]
+        text: |
+          Looks good. A heads-up for whoever builds dunning reminders on top of this: support decided we don't send payment reminders for balances under $1.00 (100 cents). People were getting reminders over a few cents of rounding and it generated a pile of tickets. The report itself should still list them.
+  - id: billing-H5
+    date: 2026-08-27
+    author: Marco
+    branch: marco/coupons
+    outcome: merged
+    ticket: |
+      Support is launching coupons. Extend compute_total in billing/tax.py with a discount_cents argument (default 0) and return the discount in the result dict.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [billing.tax-before-discount, billing.money-integer-cents]
+        text: |
+          Two rules to keep in mind here: finance computes tax on the subtotal before the discount (the coupon comes off after tax), and money stays integer cents everywhere, never floats or decimal strings.
+      - when: failed:test_lesson_tax_before_discount
+        lessons: [billing.tax-before-discount]
+        text: |
+          Tax needs to be computed on the pre-discount subtotal; that's finance's rule.
+  - id: billing-H7
+    date: 2026-09-03
+    author: Aiko
+    branch: aiko/invoice-csv-export
+    outcome: merged
+    ticket: |
+      Finance wants a CSV export of all invoices. Add export_csv(store) to billing/reports.py with the columns id, customer, issued, total, status (total formatted with money.fmt).
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: []
+        text: |
+          LGTM, thanks.
+  - id: billing-H6
+    date: 2026-09-22
+    author: Priya
+    branch: priya/tax-after-discount
+    outcome: merged
+    ticket: |
+      Finance changed the rule, effective October 1: tax is now computed on the discounted subtotal (after the coupon), not before. Please update compute_total and its tests.
+    ticket_lessons: [billing.tax-after-discount]
+    review:
+      - when: always
+        lessons: [billing.tax-after-discount]
+        text: |
+          Thanks. Confirmed with finance: tax on the discounted subtotal from now on, everywhere we compute totals.

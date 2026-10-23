@@ -56,6 +56,10 @@ class Task:
                 files.pop(line.strip(), None)
         return files
 
+    def base_state(self) -> dict[str, bytes]:
+        """The repo state the agent starts from and the grader builds on."""
+        return main_state(self.repo)
+
     def is_editable(self, rel: str) -> bool:
         if Path(rel).name in FORBIDDEN_NAMES or rel.endswith(".pth"):
             return False

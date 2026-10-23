@@ -20,15 +20,19 @@ from pathlib import Path
 
 from smb import sandbox
 from smb.paths import WORK
-from smb.repos import main_state, write_tree
+from smb.repos import write_tree
 from smb.tasks import Task
 
+# Graded code shares a process with the hidden tests, so a determined candidate could tamper with the run. These
+# references in non-test candidate files get the episode flagged; every flagged pass is hand-checked before it counts.
+SUSPICIOUS = re.compile(r"junit|_pytest|\bpytest\b|atexit|os\._exit|sys\.exit|ctypes|\bgc\.|\binspect\b|sys\.modules"
+                        r"|process\.exit|node:test|--test|reporter")
 TS_TEST = re.compile(r"""\btest\(\s*(["'`])((?:func|lesson|diag): (?:(?!\1).)+)\1""")
 TIMEOUT = 120
 
 
 def candidate_tree(task: Task, workspace: dict[str, bytes]) -> dict[str, bytes]:
-    tree = {rel: data for rel, data in main_state(task.repo).items() if not task.is_editable(rel)}
+    tree = {rel: data for rel, data in task.base_state().items() if not task.is_editable(rel)}
     for rel, data in workspace.items():
         if task.is_editable(rel) and not rel.startswith(("tests_hidden/", "hidden/")):
             tree[rel] = data
@@ -116,8 +120,22 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
         shutil.rmtree(gdir, ignore_errors=True)
 
 
+def suspicious(task: Task, workspace: dict[str, bytes]) -> list[str]:
+    base = task.base_state()
+    out = []
+    for rel, data in workspace.items():
+        if not task.is_editable(rel) or rel.startswith(("tests/", "test/")) or base.get(rel) == data:
+            continue
+        for i, line in enumerate(data.decode(errors="replace").splitlines(), 1):
+            if SUSPICIOUS.search(line):
+                out.append(f"{rel}:{i}: {line.strip()[:120]}")
+    return out
+
+
 def grade_workspace(task: Task, workspace: dict[str, bytes], label: str = "") -> dict:
-    return grade_tree(task, candidate_tree(task, workspace), label)
+    result = grade_tree(task, candidate_tree(task, workspace), label)
+    result["suspicious"] = suspicious(task, workspace)
+    return result
 
 
 def run_visible(task_repo_tree: dict[str, bytes], lang: str, tz: str, label: str = "visible", timeout: float = 120) -> sandbox.Result:

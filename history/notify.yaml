@@ -1,0 +1,93 @@
+repo: notify
+editable: ["notify/**", "tests/**"]
+sessions:
+  - id: notify-H1
+    date: 2026-08-06
+    author: Dana
+    branch: dana/weekly-digest
+    outcome: merged
+    ticket: |
+      Add a weekly digest email: send_weekly_digest(provider, user, items) in a new notify/digest.py that sends the weekly_digest template with the items joined by "; " as the summary, and sends nothing for an empty week.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [notify.send-email-helper]
+        text: |
+          Please send through email.send_email() rather than calling the provider directly: it renders the template in the user's locale and logs, and it's what everything else uses.
+      - when: always
+        lessons: [notify.quiet-hours]
+        text: |
+          Also, since the digest is transactional it can go out at any hour. But for anything marketing that goes out by SMS: no sends between 21:00 and 08:00 in the recipient's own time zone (user.tz). That came out of last month's compliance review; the server clock or UTC doesn't count.
+  - id: notify-H2
+    date: 2026-08-13
+    author: Omar
+    branch: omar/inc-433-sms-dropped
+    outcome: merged
+    ticket: |
+      INC-433: customers with big orders say they never got the order-shipped SMS. The provider dashboard shows our requests were accepted (200), but nothing was delivered for messages over 480 characters; their support confirmed they silently drop anything longer. Please fix the order-shipped SMS.
+    ticket_lessons: [notify.sms-480]
+    review:
+      - when: always
+        lessons: [notify.sms-480]
+        text: |
+          Thanks. The provider won't change this, so the rule for every SMS from now on: the whole message must be at most 480 characters. If it can get longer, cut the body and end it with "…", but keep the link intact at the end; the link is the point of most of these.
+  - id: notify-H3
+    date: 2026-08-18
+    author: Dana
+    branch: dana/webhook-retries
+    outcome: merged
+    ticket: |
+      Partner webhooks sometimes fail with 503s. Add retries to webhooks.deliver, with a `sleep` parameter (default time.sleep) so tests don't wait.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [notify.retries-3x2]
+        text: |
+          The retry policy we use: 3 attempts in total, 2 seconds apart.
+      - when: failed:test_lesson_three_attempts_two_seconds
+        lessons: [notify.retries-3x2]
+        text: |
+          Please match our policy: 3 attempts total with 2 seconds between them.
+  - id: notify-H5
+    date: 2026-08-27
+    author: Omar
+    branch: omar/webhook-logging
+    outcome: merged
+    ticket: |
+      Compliance wants an audit trail of webhook deliveries. Log every delivery attempt (url, attempt number, status, payload) from webhooks.deliver.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [notify.redact-pii]
+        text: |
+          Use log_event(): it runs redact() on every field. We never log raw email addresses or phone numbers, and webhook payloads can contain both.
+      - when: failed:test_lesson_payload_redacted
+        lessons: [notify.redact-pii]
+        text: |
+          The logs still contain the raw email from the payload. Log through log_event() so it gets redacted.
+  - id: notify-H6
+    date: 2026-09-08
+    author: Omar
+    branch: omar/template-defaults
+    outcome: merged
+    ticket: |
+      Some users have no name, so the welcome email says "Welcome to Larkspur, !". Add placeholder defaults to templates: `{name|there}` should render the fallback when the field is missing or empty. Use it in the English welcome template.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: []
+        text: |
+          Nice, thanks.
+  - id: notify-H4
+    date: 2026-09-24
+    author: Dana
+    branch: dana/retry-backoff
+    outcome: merged
+    ticket: |
+      After the Sept 19 partner outage, our fixed retries hammered them. New standard: 5 attempts with exponential backoff, waiting 1, 2, 4, then 8 seconds between attempts. Please put it in a shared notify/retry.py and use it for webhooks.
+    ticket_lessons: [notify.retries-exponential]
+    review:
+      - when: always
+        lessons: [notify.retries-exponential]
+        text: |
+          Thanks, this is the standard from now on for anything that retries.

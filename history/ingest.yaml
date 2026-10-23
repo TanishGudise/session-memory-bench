@@ -1,0 +1,102 @@
+repo: ingest
+editable: ["ingest/**", "tests/**", "scripts/**"]
+sessions:
+  - id: ingest-H1
+    date: 2026-08-07
+    author: Ruth
+    branch: ruth/kestrel-backfill-times
+    outcome: closed
+    ticket: |
+      After the one-off backfill of Kestrel's July shipments (scripts/backfill_kestrel.py), the dashboard shows their shipments a couple of hours later than Kestrel says they shipped. Please figure out why.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [ingest.kestrel-berlin-time]
+        text: |
+          That's it: Kestrel sends Europe/Berlin local time with no offset (it's what their ERP exports), and the script read it as UTC. We fixed July by hand and the script is going away. When we build the real Kestrel feed, convert from Europe/Berlin to UTC, daylight saving included.
+  - id: ingest-H2
+    date: 2026-08-11
+    author: Ruth
+    branch: ruth/inc-460-duplicate-orders
+    outcome: closed
+    ticket: |
+      INC-460: Pinewood resent yesterday's file after an upload timeout and we loaded every order twice. Please write a one-off script that lists the duplicated rows in a warehouse snapshot so ops can delete them.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [ingest.dedupe-source-external-id]
+        text: |
+          Thanks, ops has what they need. Root cause for the record: partners resend whole files when an upload fails, and the resend has a fresh exported_at on every row, so row hashes differ between the two copies. The real fix is to make loading idempotent on (source, external_id), never on a row hash. ING-212 tracks it.
+  - id: ingest-H3
+    date: 2026-08-14
+    author: Theo
+    branch: theo/acme-empty-qty
+    outcome: merged
+    ticket: |
+      Acme sometimes leaves qty empty and those rows end up quarantined. Handle empty quantities in the Acme feed.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [ingest.null-qty-zero]
+        text: |
+          An empty quantity means zero units: store 0, don't drop the row.
+      - when: failed:test_lesson_empty_qty_zero
+        lessons: [ingest.null-qty-zero]
+        text: |
+          Please store empty quantities as 0 rather than quarantining the row.
+  - id: ingest-H5
+    date: 2026-08-21
+    author: Theo
+    branch: theo/normalize-skus
+    outcome: merged
+    ticket: |
+      Joins between feeds fail because partners send SKUs with different case and stray whitespace (" mug-1" vs "MUG-1"). Add a normalize_sku() in a new ingest/skus.py and use it in the Acme feed.
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [ingest.normalize-skus]
+        text: |
+          Always normalize SKUs (trim and upper-case) before dedupe or joins; partner systems disagree on case.
+  - id: ingest-H6
+    date: 2026-09-02
+    author: Ruth
+    branch: ruth/acme-returns-feed
+    outcome: merged
+    ticket: |
+      Add Acme's returns feed in ingest/feeds/acme_returns.py, registered as "acme_returns": CSV columns return_id,sku,qty,returned_at (MM/DD/YYYY).
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: [ingest.dmy-dates, ingest.registry-quarantine]
+        text: |
+          US partners send MM/DD/YYYY, which is why parse_us_date is explicit about it. Every non-US partner sends DD/MM/YYYY, and we never use a fuzzy or automatic date parser (the 01/02 mix-up in May). And as with every feed: register it in FEEDS and quarantine bad rows with a reason instead of raising.
+      - when: always
+        lessons: [ingest.sku-field]
+        text: |
+          Also: records follow schema.py exactly (source, external_id, sku, qty, amount, occurred_at, exported_at), so the warehouse loader can validate them.
+  - id: ingest-H7
+    date: 2026-09-09
+    author: Ruth
+    branch: ruth/cli-dry-run
+    outcome: merged
+    ticket: |
+      Add a --dry-run flag to `python -m ingest.cli` that parses and validates the file but loads nothing, printing "<feed>: parsed N, quarantined M (dry run)".
+    ticket_lessons: []
+    review:
+      - when: always
+        lessons: []
+        text: |
+          LGTM.
+  - id: ingest-H4
+    date: 2026-09-18
+    author: Theo
+    branch: theo/empty-qty-quarantine
+    outcome: merged
+    ticket: |
+      Finance found phantom zero-quantity orders: empty quantities from Acme were stored as 0. From now on an empty quantity is an error: quarantine the row with reason "missing qty" in both Acme feeds.
+    ticket_lessons: [ingest.null-qty-quarantine]
+    review:
+      - when: always
+        lessons: [ingest.null-qty-quarantine]
+        text: |
+          Thanks. This applies to every feed: empty quantities are quarantined, never coerced to 0.
