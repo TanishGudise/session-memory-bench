@@ -49,7 +49,7 @@ The design, metrics and stop rules were registered before any model call: [PRERE
 
 ## Results
 
-Not run yet. The paid stages are pilot, history, main run and a Sonnet check, capped at $17.50 in total.
+The pilot is done (`PILOT.md`): all three gates passed, at $0.27. The main run (5 epochs, Amendment 1) and the Sonnet check have not run yet. The paid stages are pilot, history, main run and a Sonnet check, capped at $17.50 in total.
 
 ## Validation ($0)
 
@@ -100,6 +100,12 @@ python scripts/label_notes.py run1                     # then review the labels 
 python scripts/paid.py freeze-corpus --corpus run1 --repos billing
 python scripts/paid.py eval --stage pilot --run pilot --corpus run1 --repos billing --epochs 1
 python scripts/paid.py eval --stage pilot --run pilot --corpus run1 --repos notify inventory ingest --families M --conditions a g
+python scripts/paid.py history --stage history --corpus run1 --repos notify inventory ingest
+python scripts/paid.py distill --stage history --corpus run1 --repos notify inventory ingest
+python scripts/label_notes.py run1                     # then review the new labels by hand
+python scripts/paid.py freeze-corpus --corpus run1 --repos billing notify inventory ingest
+python scripts/paid.py eval --stage main --run main --corpus run1 --epochs 5
+python scripts/analyze.py runs/eval/main --corpus runs/history/run1
 python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 ```
 

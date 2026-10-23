@@ -8,3 +8,11 @@ branch: lena/october-newsletter
 prompt: |
   Add `send_newsletter(provider, users, body)` in a new module notify/newsletter.py that emails the `newsletter` template with `body` to our users and returns the ids of the users it was sent to. It's marketing email.
 editable: ["notify/**", "tests/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: '`notify.email.send_email()` is deprecated'
+  - kind: deprecation
+    path: notify/email.py
+    text: 'Deprecated (2026-09-30): use notify.mailer.dispatch()'

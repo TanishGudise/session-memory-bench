@@ -8,3 +8,11 @@ branch: mei/bundle-orders
 prompt: |
   Bundles are orders for several SKUs that ship together. Add `reserveBundle(db, items)` in a new file src/bundles.ts that reserves every item of a bundle order; `items` is `[{ sku, qty }]`.
 editable: ["src/**", "test/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: 'No more backorders: `reserve()` throws `InsufficientStock`'
+  - kind: code
+    path: src/stock.ts
+    text: 'Throws InsufficientStock (and changes nothing) if not enough is free'

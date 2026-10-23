@@ -8,3 +8,11 @@ branch: theo/ostrava-feed
 prompt: |
   Add a feed for Ostrava's stock movements in ingest/feeds/ostrava.py with `parse(text)`, registered as "ostrava". CSV columns: movement_id,sku,qty,moved_on (ISO date). Their exports sometimes leave qty empty.
 editable: ["ingest/**", "tests/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: 'An empty quantity is quarantined with reason "missing qty"'
+  - kind: code
+    path: ingest/feeds/acme.py
+    text: '"missing qty")  # never coerce to 0'

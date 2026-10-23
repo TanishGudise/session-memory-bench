@@ -25,7 +25,7 @@ M tasks that a solves without memory (named in the write-up as inferable without
 | f pull | 4 | 1 | 1 | 1 | 1 | 0.0038 | 0.0038 | 66k | 7.6 |
 | g oracle | 4 | 1 | 1 | 1 | 1 | 0.0027 | 0.0027 | 38k | 6.5 |
 
-Input tokens include cache reads (77–82% of input in every condition). The largest single request was 45,947 tokens, so none reached the 100k price tier. c's one M miss (`billing-04`, refunds) is `not_retrieved`: the hook-shaped query didn't surface the idempotency lesson, which was learned on a charge. f found it by searching.
+Input tokens include cache reads (77–82% of input in every condition). The largest single request was 45,947 tokens, so none reached the 100k price tier. c's one M miss (`billing-04`, refunds) is `not_retrieved`. The hook-shaped query recalled the idempotency lesson but not the chat-only rule that refunds over $500.00 need a second approver, and only that test failed. f found the rule by searching ("refund approved_by approval refund_invoice") and passed. (Corrected 2026-10-23: the first version of this record named the idempotency lesson as the miss.)
 
 These are single-epoch counts on one repo. They size the main run; they are not results.
 

@@ -8,3 +8,11 @@ branch: dana/sms-retries
 prompt: |
   The SMS provider has started returning `ProviderUnavailable` now and then. Add `send_sms_with_retry(provider, user, text, sleep=time.sleep)` to notify/sms.py that retries with our usual retry behaviour and returns the message id.
 editable: ["notify/**", "tests/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: 'Standard retry policy in `notify/retry.py`: 5 attempts, waiting 1, 2, 4, 8 seconds'
+  - kind: code
+    path: notify/retry.py
+    text: 'Standard retry policy (since the 2026-09-19 partner outage): 5 attempts, exponential backoff.'

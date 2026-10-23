@@ -47,6 +47,12 @@ def registry(errors: list) -> dict:
             check(lid in L, f"{t.id}: unknown lesson {lid}", errors)
         if t.family in ("S-u", "S-s"):
             check(bool(t.extra.get("stale_lessons")), f"{t.id}: S task without stale_lessons", errors)
+            ev = t.extra.get("change_evidence") or []
+            check({"changelog"} < {e["kind"] for e in ev}, f"{t.id}: change_evidence needs the changelog and the code", errors)
+            base = t.base_state()
+            for e in ev:
+                check(e["text"] in base.get(e["path"], b"").decode(errors="replace"),
+                      f"{t.id}: change_evidence text not in {e['path']}: {e['text'][:40]}", errors)
             check("stale_rule" in t.solutions(), f"{t.id}: S task without stale_rule solution", errors)
         if t.family == "X":
             check(bool(t.extra.get("other_lessons")) and "other_repo" in t.solutions(), f"{t.id}: X task incomplete", errors)

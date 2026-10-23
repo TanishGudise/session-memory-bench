@@ -202,4 +202,22 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 
 ## Amendments
 
-(none yet)
+### Amendment 1 — 2026-10-23, after the pilot, before the other repos' history stage and the main run
+
+The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run at about $2.3.
+
+1. **Epochs.** The main run uses **5 epochs** (32 tasks × 6 conditions × 5 = 960 episodes) instead of 3.
+   - Reason: cost and power. 3 epochs would use about a fifth of the $12 main cap, and the harm family has few pairs at 3 epochs (24 per condition on the 8 S tasks); 5 epochs give 40.
+   - This was decided before any main-run episode. The pilot data seen at that point: billing's 8 tasks at 1 epoch, and a and g on the other 10 M tasks.
+   - Pilot episodes are not pooled with the main run. Nothing else in section 3 changes.
+2. **Added descriptive analyses.** They are reported next to the registered ones, with no tests and no Holm correction.
+   - **Retrieval misses**, per memory condition (b, c, d, f), on tasks whose lessons memory could supply.
+     - A *strict* miss: a needed lesson's rule sentence (span label) is not in the recalled memory.
+     - A *clear* miss: none of the lesson's patterns is there either.
+     - For each clear miss in b, c or d, we report whether f, on the same task and epoch, recalled the lesson (span or pattern) and passed.
+   - **Dollars per solved task**, per condition, for all tasks and for M, S and X separately.
+   - **Change visibility on S tasks.**
+     - Each S task's `task.yaml` now pins `change_evidence`: the changelog line, and the code or deprecation line in main, that show the change. `validate.py` checks that each string is in main. No task, test or grading changes.
+     - An episode *saw* the change when one of those strings appears in what `list_dir`, `read_file`, `search_code` or `run_tests` returned to the agent. `search_memory` results don't count.
+     - Reported per condition and task: episodes that saw the change, pass rates when it was seen and when it wasn't, and old-rule follows (a `diag` test passing). This explains a harm result or its absence; it is not a test.
+3. **Note labels (section 5), as applied.** A note is labelled with a lesson only if it states that lesson's rule. Mentions, hints and process notes stay unlabelled. The pilot's 50 billing notes were labelled this way, and the other repos' notes will be too.

@@ -12,7 +12,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 from smb.grade import SUSPICIOUS, TRIPWIRE  # noqa: E402
 from smb.history import attempt_lines  # noqa: E402
 from smb.memory.corpus import lessons  # noqa: E402
@@ -63,6 +64,30 @@ def family_tests(rows, spec, fams):
     for name, padj in holm(ps).items():
         out[name]["p_holm"] = padj
     return out
+
+
+CODE_TOOLS = {"list_dir", "read_file", "search_code", "run_tests"}  # not search_memory: memory isn't the code
+
+
+def code_seen(ep_dir: Path) -> str:
+    """Everything the code tools returned to the agent in one episode (Amendment 1, change visibility)."""
+    f = ep_dir / "transcript.jsonl"
+    if not f.exists():
+        return ""
+    names, out = {}, []
+    for line in f.read_text().splitlines():
+        msg = json.loads(line).get("message", {})
+        for b in msg.get("content", []) if isinstance(msg.get("content"), list) else []:
+            if b.get("type") == "tool_use":
+                names[b["id"]] = b["name"]
+            elif b.get("type") == "tool_result" and names.get(b.get("tool_use_id")) in CODE_TOOLS:
+                c = b.get("content")
+                out.append(c if isinstance(c, str) else "\n".join(x.get("text", "") for x in c or [] if isinstance(x, dict)))
+    return "\n".join(out)
+
+
+def mem_need(r):
+    return {l for l in r["lessons"] if _L[l]["source"] != "repo"}  # lessons memory could have supplied
 
 
 def breakdown(r):
@@ -135,7 +160,7 @@ def main() -> int:
     res["failure_breakdown"] = {k: dict(v) for k, v in sorted(bd.items())}
     cost = {}
     for c in CONDITIONS:
-        for fams, label in ((None, "ALL"), ({"D"}, "D"), ({"C"}, "C")):
+        for fams, label in ((None, "ALL"), ({"M"}, "M"), ({"D"}, "D"), ({"S-u", "S-s"}, "S"), ({"X"}, "X"), ({"C"}, "C")):
             rs = [r for r in scored(rows) if r["condition"] == c and (fams is None or r["family"] in fams)]
             if not rs:
                 continue
@@ -172,6 +197,62 @@ def main() -> int:
             entry["searches_per_episode"] = sum(len(r["search_queries"]) for r in fr) / len(fr) if fr else None
         retr[c] = entry
     res["retrieval"] = retr
+    # Amendment 1 (1): retrieval misses per condition, and whether the search tool (f) recovered them. A miss is
+    # strict when the lesson's rule sentence (span label) wasn't recalled, and clear when not even one of its patterns was.
+    by_tec = {(r["task"], r["epoch"], r["condition"]): r for r in scored(rows)}
+    misses = {}
+    for c in ("b", "c", "d", "f"):
+        rs = [r for r in scored(rows) if r["condition"] == c and mem_need(r)]
+        cases = []
+        for r in rs:
+            strict = sorted(mem_need(r) - set(r["retrieved"]))
+            if not strict:
+                continue
+            clear = sorted(set(strict) - set(r.get("retrieved_patterns", [])))
+            case = {"episode": r["episode"], "family": r["family"], "missing": strict, "missing_clear": clear, "score": r["score"]}
+            fr = by_tec.get((r["task"], r["epoch"], "f"))
+            if c != "f" and fr is not None:
+                f_got = set(fr["retrieved"]) | set(fr.get("retrieved_patterns", []))
+                case["f_found"] = set(clear or strict) <= f_got
+                case["f_score"] = fr["score"]
+            cases.append(case)
+        clear_cases = [x for x in cases if x["missing_clear"]]
+        entry = {"episodes": len(rs), "misses_strict": len(cases), "misses_clear": len(clear_cases),
+                 "solved_despite_clear_miss": sum(x["score"] for x in clear_cases)}
+        if c != "f":
+            entry["f_found_clear_missing"] = sum(1 for x in clear_cases if x.get("f_found"))
+            entry["f_solved_on_clear_miss"] = sum(1 for x in clear_cases if x.get("f_score") == 1)
+        entry["cases"] = cases
+        misses[c] = entry
+    res["retrieval_misses"] = misses
+    # Amendment 1 (3): on S tasks, was the change visible in what the code tools returned?
+    tasks_ev = {}
+    for t in {r["task"] for r in rows if r["family"] in ("S-u", "S-s")}:
+        import yaml
+        tasks_ev[t] = yaml.safe_load((ROOT / "tasks" / t / "task.yaml").read_text()).get("change_evidence", [])
+    vis, vis_rows = {}, []
+    for r in scored(rows):
+        if r["family"] not in ("S-u", "S-s"):
+            continue
+        seen_text = code_seen(run / "episodes" / r["episode"])
+        kinds = sorted({e["kind"] for e in tasks_ev[r["task"]] if e["text"] in seen_text})
+        old = any(v == "pass" for v in r.get("diag", {}).values())
+        vis_rows.append({"episode": r["episode"], "task": r["task"], "family": r["family"], "condition": r["condition"],
+                         "seen": kinds, "score": r["score"], "followed_old_rule": old})
+    for c in CONDITIONS:
+        for t in sorted(tasks_ev):
+            vr = [v for v in vis_rows if v["condition"] == c and v["task"] == t]
+            if not vr:
+                continue
+            seen = [v for v in vr if v["seen"]]
+            unseen = [v for v in vr if not v["seen"]]
+            vis[f"{c}/{t}"] = {"episodes": len(vr), "seen": len(seen),
+                               "seen_changelog": sum("changelog" in v["seen"] for v in vr),
+                               "seen_code": sum(any(k != "changelog" for k in v["seen"]) for v in vr),
+                               "pass_if_seen": f"{sum(v['score'] for v in seen)}/{len(seen)}",
+                               "pass_if_unseen": f"{sum(v['score'] for v in unseen)}/{len(unseen)}",
+                               "followed_old_rule": sum(v["followed_old_rule"] for v in vr)}
+    res["change_visibility_S"] = {"by_condition_task": vis, "episodes": vis_rows}
     mc, mg = rates["c/M"]["rate"], rates["g/M"]["rate"]
     res["saturated"] = bool(mc is not None and mg is not None and mc >= 0.9 and mg >= 0.9)
     res["flagged_suspicious"] = [r["episode"] for r in rows if r.get("suspicious")]
@@ -214,6 +295,20 @@ def main() -> int:
             lines.append(f"- {name} {t['x']} vs {t['y']} ({t['alternative']}): {t['only_x_pass']} vs {t['only_y_pass']} discordant "
                          f"of {t['pairs']}, p={t['p']:.4f}, Holm {t['p_holm']:.4f}, diff {t['diff']:+.3f} "
                          f"[{t['diff_ci95'][0]:+.3f}, {t['diff_ci95'][1]:+.3f}]")
+    lines += ["", "$ per solved task (Amendment 1):", "", "| cond | all | M | S |", "|---|---|---|---|"]
+    for c in CONDITIONS:
+        cell = lambda k: (f"{res['cost'][k]['usd_per_solved']:.4f}" if k in res["cost"] and res["cost"][k]["usd_per_solved"] else "-")  # noqa: E731
+        lines.append(f"| {c} | {cell(c + '/ALL')} | {cell(c + '/M')} | {cell(c + '/S')} |")
+    lines += ["", "Retrieval misses (Amendment 1): episodes where a needed memory lesson wasn't in recalled memory.", ""]
+    for c, m in res["retrieval_misses"].items():
+        extra = (f"; on clear misses f recalled the lesson in {m['f_found_clear_missing']} and solved {m['f_solved_on_clear_miss']}"
+                 if c != "f" else "")
+        lines.append(f"- {c}: of {m['episodes']} episodes, {m['misses_strict']} missed the rule sentence and {m['misses_clear']} "
+                     f"missed the lesson clearly (no pattern either); {m['solved_despite_clear_miss']} clear misses solved anyway{extra}")
+    lines += ["", "Change visibility on S tasks (Amendment 1): pass rate when the changelog or code showing the change was read.", "",
+              "| cond/task | seen | pass if seen | pass if unseen | followed old rule |", "|---|---|---|---|---|"]
+    for k, v in res["change_visibility_S"]["by_condition_task"].items():
+        lines.append(f"| {k} | {v['seen']}/{v['episodes']} | {v['pass_if_seen']} | {v['pass_if_unseen']} | {v['followed_old_rule']} |")
     (run / "analysis.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     return 0

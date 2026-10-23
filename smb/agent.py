@@ -4,6 +4,7 @@ nothing else. One loop serves eval episodes (one user turn) and history sessions
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -24,13 +25,39 @@ CUT_OFF = "Your last reply was cut off. Continue, keeping each reply shorter."
 CUT_OFF_TOOL = "error: your reply was cut off before this tool call was complete, so it was not run. Try again with a shorter call."
 API_ATTEMPTS = 3          # the SDK client is built with max_retries=0; the loop retries, reserving again each time
 RETRY_SLEEP = (2.0, 8.0)
+DEADLINE_SLACK = 120.0    # a call is abandoned this long after its own HTTP timeout, whatever the socket is doing
+
+
+class CallDeadline(Exception):
+    """The request neither returned nor failed by its hard deadline. A socket read that keeps receiving bytes never
+    hits the HTTP read timeout (a history session hung 50 minutes on one call), so the wait is bounded here."""
+
+
+def _with_deadline(fn: Callable[[], object], seconds: float):
+    box: dict = {}
+
+    def run():
+        try:
+            box["resp"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - handed back to the caller's thread
+            box["exc"] = exc
+
+    t = threading.Thread(target=run, daemon=True)  # an abandoned call keeps only its own client's connection
+    t.start()
+    t.join(seconds)
+    if t.is_alive():
+        raise CallDeadline(f"no response after {seconds:.0f}s")
+    if "exc" in box:
+        raise box["exc"]
+    return box["resp"]
 
 
 def _transient(exc: Exception) -> bool:
     """Errors worth retrying: connection problems, timeouts, rate limits, server errors."""
     name = type(exc).__name__
     status = getattr(exc, "status_code", None)
-    return name in ("APIConnectionError", "APITimeoutError", "RateLimitError", "InternalServerError", "OverloadedError") \
+    return name in ("APIConnectionError", "APITimeoutError", "RateLimitError", "InternalServerError", "OverloadedError",
+                    "CallDeadline") \
         or (isinstance(status, int) and (status == 429 or status >= 500))
 
 
@@ -54,7 +81,8 @@ def metered_create(client, meter: Meter | None, model: str, reserve_system: str,
             except CapReached:
                 return None, cost
         try:
-            resp = client.messages.create(model=model, max_tokens=max_tokens, messages=messages, **kwargs)
+            resp = _with_deadline(lambda: client.messages.create(model=model, max_tokens=max_tokens, messages=messages, **kwargs),
+                                  float(kwargs.get("timeout") or 180.0) + DEADLINE_SLACK)
         except Exception as exc:
             if ticket is not None:
                 if _maybe_billed(exc):

@@ -8,3 +8,11 @@ branch: kenji/low-stock-alerts
 prompt: |
   Purchasing wants low-stock alerts. Add `lowStock(db, threshold)` in a new file src/alerts.ts that returns the SKUs we're about to run out of (fewer than `threshold` units left that we can still sell), sorted.
 editable: ["src/**", "test/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: '`stock.get()` is deprecated: it returns units on hand'
+  - kind: deprecation
+    path: src/stock.ts
+    text: 'Deprecated (2026-09-29): use level()'

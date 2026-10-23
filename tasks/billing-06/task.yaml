@@ -8,3 +8,11 @@ branch: aiko/checkout-preview
 prompt: |
   Checkout needs a price preview. Add `preview_invoice(lines_cents, coupon_cents, tax_rate)` in a new module billing/checkout.py that returns a dict with `subtotal`, `discount`, `tax` and `total` in cents, following our tax rules.
 editable: ["billing/**", "tests/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: 'Tax is computed on the discounted subtotal (finance rule from 2026-10-01)'
+  - kind: code
+    path: billing/tax.py
+    text: 'Tax is computed on the discounted subtotal (finance rule since 2026-10-01)'

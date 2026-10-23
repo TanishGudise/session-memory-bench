@@ -8,3 +8,11 @@ branch: priya/payment-receipts
 prompt: |
   When a payment comes in we want to send the customer a receipt. Add `apply_payment(store, invoice_id, cents, charge_id)` in a new module billing/receipts.py that records the payment and returns the receipt text `"Invoice <id>: paid <amount>, balance <balance>"`, with amounts formatted by `money.fmt`.
 editable: ["billing/**", "tests/**"]
+# Where main shows the change (PREREGISTRATION Amendment 1): text the agent sees if it reads that file or a search hits it.
+change_evidence:
+  - kind: changelog
+    path: CHANGELOG.md
+    text: '`Store.fetch_invoice()` now serves from the report cache'
+  - kind: deprecation
+    path: billing/db.py
+    text: 'Deprecated for request paths: use get_invoice()'
