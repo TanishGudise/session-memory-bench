@@ -1,6 +1,6 @@
 {
  "files": {
-  "PREREGISTRATION.md": "7f91e7dc76f4a44d9af614b8160a9697ca27216399a43cb031bc4ae9284f39eb",
+  "PREREGISTRATION.md": "e92414bd4bee0febaed6d8fbf44d33d645df4e36c11509855d9798d15f81e25c",
   "history/billing.yaml": "d546cd360b8b2b2e595b09fe39b3664919526dd4f00a3948bb76054ee9f7ca88",
   "history/chat.yaml": "caa5a1a8a75a37b680dfd868d9a7dbbd027ec7dbf815978eb9148123460cd4e1",
   "history/checks/billing-H1/test_checks.py": "5983c1f674f12e89b0b9351ade14c517a4d5af794f4f70471cfa401a8fa628c2",
@@ -147,7 +147,7 @@
   "repos/notify/steps/0930-U1/notify/mailer.py": "7076492f28311add8f63b77b5ca907184f6a8677fccc93ec165ac7fed6bee2de",
   "repos/notify/steps/0930-U1/notify/templates.py": "f091223745a3861131f8e46266c32e9c16f952810c7b75cb57384dcedeea86a8",
   "repos/notify/steps/0930-U1/tests/test_mailer.py": "0f893309d62e7c6de7279b76b210a33a269bd82d3c5d07280c0af1c8b64e7e8e",
-  "scripts/analyze.py": "6c70b23203b344a265c93b23f75fd498fd4b3f25989b7e5302df26538eaa9afe",
+  "scripts/analyze.py": "5af23532af00168f2e054e46b973baa864fa695c896c07cb3b89ca3334e4dc8c",
   "scripts/label_notes.py": "1be7d26b600e098dbbdc0a0af09fe220653926900af554ef2b27d771bf300346",
   "scripts/manifest.py": "64ce41e444aed9e0d2df7ced83dfac8fd2b8ada95f13b61928e1d56bfa27a4f6",
   "scripts/paid.py": "25e1838e49ffe8e0e9847b440ce5cb3fbddb64acb9e2ddf8e6608c69b0b69f3f",
@@ -325,5 +325,5 @@
   "tasks/notify-08/solutions/oracle/notify/stats.py": "f0aa4444cc3a3fb65446fe47e120b33d9371ff473bc5f3cee15a77d1648833ed",
   "tasks/notify-08/task.yaml": "da24c93cad2eb1cfca9256e40e6d569a34ae5e7ba75eafa5a7b9a4c81ad8ab22"
  },
- "manifest_sha256": "38c856a4f6ceb4b09d2c4bb6ac70d7583c483871a0969f9012cfe532983db19b"
+ "manifest_sha256": "a16b83f82505cb69ca61e25c55cd0df6f46110bc19bc7b6dcfbb211b9a0f27f2"
 }
