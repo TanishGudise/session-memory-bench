@@ -92,14 +92,25 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
     spec = history_specs()[sid]
     task = history_task(sid)
     sess_dir = out_dir / sid
+    if (sess_dir / "session.json").exists():
+        raise ValueError(f"{sid} is already kept")
+    sess_dir.mkdir(parents=True, exist_ok=True)
+    # Attempt bookkeeping: `attempt` holds the number of the latest attempt, written before it starts. An attempt that
+    # isn't kept has a line in attempts.jsonl and, if it got that far, a transcript renamed attempt-<n> here.
+    marker = sess_dir / "attempt"
+    prev = int(marker.read_text()) if marker.exists() else None
+    files = set(_attempt_numbers(sess_dir))
     earlier = sess_dir / "transcript.jsonl"
-    if earlier.exists():  # an attempt that wasn't kept: its transcript stays beside the new one
-        n = 1 + max(_attempt_numbers(sess_dir), default=0)
+    if earlier.exists():  # the previous attempt wasn't kept: its transcript stays beside the new one
+        n = prev if prev is not None and prev not in files else 1 + max(files, default=0)
         earlier.rename(sess_dir / f"attempt-{n}.transcript.jsonl")
-        if n not in _logged_attempts(sess_dir):  # the process was killed before it could write a record
-            _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": n, "complete": False,
-                                 "problem": "ended without a record (process killed)"})
-    attempt = 1 + max(_attempt_numbers(sess_dir), default=0) if sess_dir.exists() else 1
+        files.add(n)
+    known = files | ({prev} if prev is not None else set())
+    for n in sorted(known - _logged_attempts(sess_dir)):
+        _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": n, "complete": False,
+                             "problem": "ended without a record (killed, or its record could not be written)"})
+    attempt = 1 + max(known | _logged_attempts(sess_dir), default=0)
+    marker.write_text(str(attempt))
     ws_dir = WORK / "h" / uuid.uuid4().hex[:12] / spec["repo"]
     try:  # everything after the mkdir sits inside the try, so the finally always removes the workspace
         write_tree(task.base_state(), ws_dir)
@@ -140,15 +151,19 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
         final = {"finished", "no_finish", "call_limit", "context_limit", "wall_clock", "refusal"}
         complete = stop_task in final and stop_review in final
         record["complete"] = complete
-        # an incomplete session (spend cap, API error) is never frozen into the corpus; a resume runs it again
+        # an incomplete session (spend cap) is never frozen into the corpus; a resume runs it again
         if complete:
             (sess_dir / "session.json").write_text(json.dumps(record, indent=2))
         else:
+            record["problem"] = f"spend cap (stops {stop_task}/{stop_review})"
             _not_kept(sess_dir, record)
         return record
     except BaseException as exc:  # an API error, a harness failure or Ctrl-C: record the attempt, then let it propagate
-        _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": attempt, "complete": False,
-                             "problem": f"error: {type(exc).__name__}: {exc}"[:300]})
+        try:
+            _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": attempt, "complete": False,
+                                 "problem": f"error: {type(exc).__name__}: {exc}"[:300]})
+        except Exception:  # noqa: BLE001 - never mask the original error; the next run backfills this attempt
+            pass
         raise
     finally:
         shutil.rmtree(ws_dir.parent, ignore_errors=True)

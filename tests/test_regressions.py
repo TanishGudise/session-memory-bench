@@ -232,8 +232,69 @@ def test_every_discarded_history_attempt_is_numbered_and_kept(tmp_path, monkeypa
     lines = [json.loads(l) for l in (d / "attempts.jsonl").read_text().splitlines()]
     assert [l["attempt"] for l in lines] == [1, 2, 3]
     assert lines[0]["problem"].startswith("error: BadRequest") and lines[1]["problem"] == "checks not graded: timeout"
-    assert lines[2]["problem"] == "ended without a record (process killed)"
+    assert lines[2]["problem"] == "ended without a record (killed, or its record could not be written)"
     assert all((d / f"attempt-{n}.transcript.jsonl").exists() for n in (1, 2, 3))
+
+
+def test_attempt_numbers_survive_setup_failures_caps_and_gaps(tmp_path, monkeypatch):
+    from smb import history
+    from smb.meter import CapReached
+    from smb.memory.corpus import history_specs
+    from smb.stub import HistoryStub, StubClient
+    spec = history_specs()["billing-H1"]
+
+    def stub():
+        return StubClient(HistoryStub({**spec, "id": "billing-H1"}))
+
+    def lines(d):
+        return [(l["attempt"], l["problem"]) for l in map(json.loads, (d / "attempts.jsonl").read_text().splitlines())]
+
+    # a setup failure, then a killed draw, then a kept one: the killed draw still gets its own number and line
+    out = tmp_path / "a"
+    d = out / "billing-H1"
+    with monkeypatch.context() as m:
+        m.setattr(history, "TranscriptWriter", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")))
+        with pytest.raises(OSError):
+            history.run_session("billing-H1", stub(), "stub", out)
+    with monkeypatch.context() as m:
+        m.setattr(history, "_not_kept", lambda *a, **k: None)
+        m.setattr(history, "grade_workspace", lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt):
+            history.run_session("billing-H1", stub(), "stub", out)
+    assert history.run_session("billing-H1", stub(), "stub", out)["attempt"] == 3
+    assert lines(d) == [(1, "error: OSError: disk full"), (2, "ended without a record (killed, or its record could not be written)")]
+    assert sorted(p.name for p in d.glob("attempt-*")) == ["attempt-2.transcript.jsonl"]
+
+    # a spend cap is recorded with its cause
+    class CapOnThird:
+        n = 0
+
+        def reserve(self, *a, **k):
+            self.n += 1
+            if self.n >= 3:
+                raise CapReached("cap")
+            return object()
+
+        def settle(self, *a, **k):
+            return 0.0
+
+        def release(self, *a, **k):
+            pass
+    out = tmp_path / "b"
+    rec = history.run_session("billing-H1", stub(), "stub", out, meter=CapOnThird())
+    assert rec["complete"] is False and rec["problem"].startswith("spend cap")
+    assert lines(out / "billing-H1") == [(1, rec["problem"])]
+
+    # numbering takes the highest number, so a gap never overwrites an earlier transcript
+    out = tmp_path / "c"
+    d = out / "billing-H1"
+    d.mkdir(parents=True)
+    (d / "attempt-2.transcript.jsonl").write_text("A2")
+    (d / "attempts.jsonl").write_text(json.dumps({"attempt": 2, "problem": "x"}) + "\n")
+    (d / "transcript.jsonl").write_text("A3")
+    assert history.run_session("billing-H1", stub(), "stub", out)["attempt"] == 4
+    assert (d / "attempt-2.transcript.jsonl").read_text() == "A2" and (d / "attempt-3.transcript.jsonl").read_text() == "A3"
+    assert [a for a, _ in lines(d)] == [2, 3]
 
 
 def test_history_workspace_is_removed_when_setup_fails(tmp_path, monkeypatch):
