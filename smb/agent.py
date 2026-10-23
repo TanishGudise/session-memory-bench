@@ -30,8 +30,8 @@ DEADLINE_SLACK = 120.0    # a call is abandoned this long after its own HTTP tim
 
 class CallDeadline(Exception):
     """The request neither returned nor failed by its hard deadline, counted in wall time. The HTTP timeout and a plain
-    join count monotonic time, which stops while the Mac sleeps: a history call sent just before a clamshell sleep was
-    still waiting 68 minutes later. After a wake past the deadline the call is abandoned and retried."""
+    join count monotonic time, which stops while the Mac sleeps: a history call sent during a dark wake with the lid
+    closed was still waiting 68 minutes later. After a wake past the deadline the call is abandoned and retried."""
 
 
 def _with_deadline(fn: Callable[[], object], seconds: float):
@@ -47,7 +47,7 @@ def _with_deadline(fn: Callable[[], object], seconds: float):
     t.start()
     end = time.time() + seconds  # wall time, which keeps counting through a system sleep
     while t.is_alive() and time.time() < end:
-        t.join(1.0)
+        t.join(min(1.0, max(0.0, end - time.time())))
     if t.is_alive():
         raise CallDeadline(f"no response after {seconds:.0f}s")
     if "exc" in box:

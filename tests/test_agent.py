@@ -73,7 +73,7 @@ def test_a_call_that_never_returns_is_abandoned_booked_and_retried(tmp_path, mon
     monkeypatch.setattr(agent, "RETRY_SLEEP", (0.0, 0.0))
     stuck = threading.Event()
 
-    def create(**kw):  # a read that never ends, like a socket that keeps receiving bytes
+    def create(**kw):  # a call that never returns
         stuck.wait(30)
     client = SimpleNamespace(messages=SimpleNamespace(create=create))
     meter = Meter(cap_usd=1.0, ledger_path=tmp_path / "spend.jsonl", stage="t")
@@ -100,3 +100,21 @@ def test_an_interrupted_call_is_booked_at_its_worst_case(tmp_path):
         agent.metered_create(client, meter, "claude-haiku-5-5", "sys", [{"role": "user", "content": "hi"}], [], 100, timeout=5)
     lines = (tmp_path / "spend.jsonl").read_text().splitlines()
     assert len(lines) == 1 and '"worst_case": true' in lines[0] and meter.reserved == 0
+
+
+def test_the_deadline_counts_wall_time_through_a_sleep(monkeypatch):
+    import threading
+
+    import pytest
+
+    from smb import agent
+    stuck = threading.Event()
+    real_time = agent.time.time
+    t0 = real_time()
+    # wall time jumps ahead as if the machine slept, while the join's own clock barely moves
+    monkeypatch.setattr(agent.time, "time", lambda: real_time() + (10_000 if real_time() - t0 > 0.3 else 0))
+    start = real_time()
+    with pytest.raises(agent.CallDeadline):
+        agent._with_deadline(lambda: stuck.wait(30), 1000.0)
+    stuck.set()
+    assert real_time() - start < 5

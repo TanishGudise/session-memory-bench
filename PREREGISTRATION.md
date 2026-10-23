@@ -215,7 +215,7 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
      - A *strict* miss: a needed lesson is not recalled by section 4's rule (span labels for b, c and f; a note's hand label or a chat span label for d).
      - A *clear* miss: none of the lesson's patterns is there either (for b, matched against the frozen raw block of the task's repo).
      - For each clear miss in b, c or d, we report whether f, on the same task and epoch, recalled the lesson (span or pattern) and passed.
-   - **Dollars per solved task**, per condition, for all tasks and for M, S and X separately. Each episode is priced from the usage of its answered calls. Worst-case bookings (failed or abandoned calls that may have been billed) are reported beside it, as dollars and episode counts per condition.
+   - **Dollars per solved task**, per condition, for all tasks and for M, S and X separately. Each episode is priced from the usage of its answered calls. Worst-case bookings (failed or abandoned calls that may have been billed) are reported beside it per condition for scored episodes, as dollars and episode counts. The ledger's total, and its total of worst-case bookings, which include episodes that errored and were re-run, are reported too.
    - **Change visibility on S tasks.**
      - Each S task's `task.yaml` now pins `change_evidence`: the changelog line, and the code or deprecation line in main, that show the change. `validate.py` checks that each string is in main. No task, test or grading changes.
      - An episode *saw* the change when one of those strings appears in what `list_dir`, `read_file`, `search_code` or `run_tests` returned to the agent. `search_memory` results don't count.
@@ -228,5 +228,5 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
    - From now on:
      - a request that hasn't returned 120 seconds after its own timeout, counted in wall time, is abandoned, booked at its worst case, and retried as a transient error (same 3 attempts);
      - a request interrupted by Ctrl-C is booked at its worst case;
-     - paid stages run on AC power with system sleep prevented (`caffeinate -s`).
+     - paid stages run on AC power, with the lid open and system sleep prevented (`caffeinate -s`); the main stage refuses to start on battery.
    - Calls that return are unaffected.

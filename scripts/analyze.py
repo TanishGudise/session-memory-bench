@@ -203,6 +203,12 @@ def main() -> int:
                 "memory_chars_mean": round(sum(r["memory_chars"] for r in rs) / len(rs)),
             }
     res["cost"] = cost
+    ledger = run / "spend.jsonl"  # every booking, including those of episodes that errored and were re-run
+    if ledger.exists():
+        recs = [json.loads(l) for l in ledger.read_text().splitlines() if l.strip()]
+        wc = [x for x in recs if (x.get("usage") or {}).get("worst_case")]
+        res["ledger"] = {"requests": len(recs), "usd": round(sum(x["cost"] for x in recs), 4),
+                         "worst_case_requests": len(wc), "worst_case_usd": round(sum(x["cost"] for x in wc), 4)}
     retr = {}
     for c in ("b", "c", "d", "f"):
         mem = lambda r: {l for l in r["lessons"] if L[l]["source"] != "repo"}  # noqa: E731
@@ -338,13 +344,17 @@ def main() -> int:
         w = res["cost"].get(c + "/ALL", {})
         lines.append(f"| {c} | {cell(c + '/ALL')} | {cell(c + '/M')} | {cell(c + '/S')} | {cell(c + '/X')} | "
                      f"{w.get('worst_case_usd', 0):.4f} ({w.get('episodes_with_worst_case', 0)}) |")
+    if "ledger" in res:
+        g = res["ledger"]
+        lines.append(f"\nLedger, all bookings including re-run episodes: {g['requests']} requests, ${g['usd']:.4f}; "
+                     f"worst case {g['worst_case_requests']} requests, ${g['worst_case_usd']:.4f}.")
     lines += ["", "Retrieval misses (Amendment 1): episodes where a needed memory lesson wasn't in recalled memory.", ""]
     for c, m in res["retrieval_misses"].items():
         extra = (f"; on those clear misses f recalled the lesson and passed in {m['f_found_and_solved_on_clear_miss']} "
                  f"(recalled {m['f_found_clear_missing']}, passed {m['f_solved_on_clear_miss']}, no f episode {m['f_na_on_clear_miss']})"
                  if c != "f" else "")
         lines.append(f"- {c}: of {m['episodes']} episodes, {m['misses_strict']} missed the rule sentence and {m['misses_clear']} "
-                     f"missed the lesson clearly (no pattern either); {m['solved_despite_clear_miss']} clear misses solved anyway{extra}")
+                     f"missed the lesson clearly (no pattern either); {m['solved_despite_clear_miss']} of the clear misses solved anyway{extra}")
     lines += ["", "Change visibility on S tasks (Amendment 1): pass rate when the changelog or code showing the change was read.", "",
               "| cond/task | seen | pass if seen | pass if unseen | followed old rule |", "|---|---|---|---|---|"]
     for k, v in res["change_visibility_S"]["by_condition_task"].items():

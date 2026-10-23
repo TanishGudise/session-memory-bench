@@ -67,6 +67,14 @@ def spent(stage: str | None = None) -> float:
     return total
 
 
+def on_ac_power() -> bool | None:
+    try:
+        out = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return "AC Power" in out
+
+
 class Session:
     """Proxy + guard + client for a paid stage (or nothing, for --stub)."""
 
@@ -254,6 +262,10 @@ def main() -> int:
         except BlockingIOError:
             raise SystemExit(f"another process is running stage {stage}")
         locks.append(fh)
+    if not a.stub and on_ac_power() is False:  # sleep stops the request clocks (Amendment 1, item 4)
+        if getattr(a, "stage", None) == "main":
+            raise SystemExit("the main stage runs on AC power only: plug in, keep the lid open, and run under caffeinate -s")
+        print(json.dumps({"warning": "on battery: keep the lid open; a sleep stalls requests until the wall-clock deadline"}))
     s = Session(a.stub, RUNS / "logs")
     try:
         {"history": cmd_history, "distill": cmd_distill, "freeze-corpus": cmd_freeze_corpus, "eval": cmd_eval}[a.cmd](a, s)
