@@ -127,7 +127,8 @@ def cmd_history(a, s: Session):
         rec = run_session(sid, s.client(HistoryStub({**spec, "id": sid})), model, out, meter=meter)
         print(json.dumps({k: rec[k] for k in ("id", "stop_task", "stop_review", "complete", "checks_failed", "calls", "cost")}), flush=True)
         if not rec["complete"]:
-            print(json.dumps({"stopped": sid, "reason": "incomplete session (cap or API error); resume runs it again"}))
+            reason = rec.get("problem") or "incomplete session (cap or API error)"
+            print(json.dumps({"stopped": sid, "reason": f"{reason}; resume runs it again"}))
             break
     print(json.dumps({"stage": "history", "spent": round(meter.spent, 4)}))
 

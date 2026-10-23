@@ -71,19 +71,30 @@ def review_message(spec: dict, failed_checks: set[str]) -> tuple[str, list[dict]
     return text, posted
 
 
+def _not_kept(sess_dir: Path, record: dict) -> None:
+    """Record an attempt that stays out of the corpus; attempts.jsonl keeps every one, for the write-up's count."""
+    (sess_dir / "session.partial.json").write_text(json.dumps(record, indent=2))
+    with open(sess_dir / "attempts.jsonl", "a") as fh:
+        fh.write(json.dumps(record) + "\n")
+
+
 def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None = None, limits: Limits | None = None) -> dict:
     spec = history_specs()[sid]
     task = history_task(sid)
-    ws_dir = WORK / "h" / uuid.uuid4().hex[:12] / spec["repo"]
-    write_tree(task.base_state(), ws_dir)
-    ws = Workspace(ws_dir, task.lang, pid_dir=WORK / "pids")
     sess_dir = out_dir / sid
-    start = datetime(task.date.year, task.date.month, task.date.day, 15, 0, tzinfo=timezone.utc)
-    tw = TranscriptWriter(sess_dir / "transcript.jsonl", str(uuid.uuid5(uuid.NAMESPACE_URL, f"smb/{sid}")),
-                          f"/work/{spec['repo']}", spec["branch"], start=start)
-    ep = Episode(client=client, model=model, system=system_prompt(spec["repo"], spec["branch"]), tools=tool_specs(),
-                 ws=ws, meter=meter, transcript=tw, limits=limits or Limits())
-    try:
+    earlier = sess_dir / "transcript.jsonl"
+    if earlier.exists():  # an attempt that wasn't kept: its transcript stays beside the new one
+        n = len(list(sess_dir.glob("attempt-*.transcript.jsonl"))) + 1
+        earlier.rename(sess_dir / f"attempt-{n}.transcript.jsonl")
+    ws_dir = WORK / "h" / uuid.uuid4().hex[:12] / spec["repo"]
+    try:  # everything after the mkdir sits inside the try, so the finally always removes the workspace
+        write_tree(task.base_state(), ws_dir)
+        ws = Workspace(ws_dir, task.lang, pid_dir=WORK / "pids")
+        start = datetime(task.date.year, task.date.month, task.date.day, 15, 0, tzinfo=timezone.utc)
+        tw = TranscriptWriter(sess_dir / "transcript.jsonl", str(uuid.uuid5(uuid.NAMESPACE_URL, f"smb/{sid}")),
+                              f"/work/{spec['repo']}", spec["branch"], start=start)
+        ep = Episode(client=client, model=model, system=system_prompt(spec["repo"], spec["branch"]), tools=tool_specs(),
+                     ws=ws, meter=meter, transcript=tw, limits=limits or Limits())
         stop_task = ep.user_turn(spec["ticket"].strip())
         checks, harness_problem = None, None
         if task.has_checks():
@@ -98,7 +109,7 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
             record = {"id": sid, "repo": spec["repo"], "stop_task": stop_task, "stop_review": None, "checks_failed": [],
                       "complete": False, "problem": harness_problem, "calls": ep.calls, "usage": dict(ep.usage),
                       "cost": round(ep.cost, 6)}
-            (sess_dir / "session.partial.json").write_text(json.dumps(record, indent=2))
+            _not_kept(sess_dir, record)
             return record
         failed = {n for n, v in (checks or {}).get("tests", {}).items() if v != "pass"}
         text, posted = review_message(spec, failed)
@@ -116,7 +127,10 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
         complete = stop_task in final and stop_review in final
         record["complete"] = complete
         # an incomplete session (spend cap, API error) is never frozen into the corpus; a resume runs it again
-        (sess_dir / ("session.json" if complete else "session.partial.json")).write_text(json.dumps(record, indent=2))
+        if complete:
+            (sess_dir / "session.json").write_text(json.dumps(record, indent=2))
+        else:
+            _not_kept(sess_dir, record)
         return record
     finally:
         shutil.rmtree(ws_dir.parent, ignore_errors=True)

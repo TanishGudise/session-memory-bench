@@ -130,6 +130,7 @@ def test_analysis_runs_on_a_small_result_set(tmp_path):
     out = json.loads((tmp_path / "analysis.json").read_text())
     assert "random_10pct_seed0" in out["hand_check"] and out["family_A_benefit_M"]["A1"]["pairs"] == 20
     assert len(out["hand_check"]["S_tasks_a_vs_c_disagree"]) == 20
+    assert len(out["hand_check"]["random_10pct_seed0"]) == 20  # (240 scored - 40 on the disagreement list) // 10
     assert not [x for x in out["hand_check"]["random_10pct_seed0"] if x.startswith(("billing-06__a__", "billing-06__c__"))]
 
 
@@ -151,20 +152,42 @@ def test_runner_and_history_refuse_an_over_budget_snapshot(tmp_path, monkeypatch
     assert not (tmp_path / "hist" / "billing-H1" / "session.json").exists()
 
 
-def test_history_with_ungraded_checks_posts_no_review_and_paid_survives(tmp_path, monkeypatch):
+def test_history_with_ungraded_checks_posts_no_review_and_paid_survives(tmp_path, monkeypatch, capsys):
     import argparse
     import importlib
-    import sys
     from smb import history
     real = history.grade_workspace
     monkeypatch.setattr(history, "grade_workspace", lambda *a, **k: {**real(*a, **k), "status": "timeout"})
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
     paid = importlib.import_module("paid")
     monkeypatch.setattr(paid, "RUNS", tmp_path)
+    monkeypatch.setattr(paid.netguard, "install", lambda *a, **k: None)  # leave the test process's sockets alone
     args = argparse.Namespace(stub=True, corpus="c", stage="pilot", model="haiku", repos=["billing"])
-    paid.cmd_history(args, paid.Session(True, tmp_path / "logs"))  # stops at the first incomplete session, no crash
+    for _ in range(2):  # stops at the first incomplete session, no crash; the resume re-runs it
+        paid.cmd_history(args, paid.Session(True, tmp_path / "logs"))
+    assert capsys.readouterr().out.count('"reason": "checks not graded: timeout; resume runs it again"') == 2
     d = tmp_path / "history" / "c" / "billing-H1"
     rec = json.loads((d / "session.partial.json").read_text())
     assert rec["complete"] is False and "checks not graded: timeout" in rec["problem"]
     assert "Review from" not in (d / "transcript.jsonl").read_text()
     assert not (d / "session.json").exists()
+    attempts = [json.loads(l) for l in (d / "attempts.jsonl").read_text().splitlines()]
+    assert [a["problem"] for a in attempts] == ["checks not graded: timeout"] * 2
+    assert (d / "attempt-1.transcript.jsonl").exists() and not (d / "attempt-2.transcript.jsonl").exists()
+
+
+def test_workspace_is_removed_when_setup_fails(tmp_path, monkeypatch):
+    from smb import runner
+    from smb.memory.provider import NoMemory
+    from smb.stub import EvalStub, StubClient
+    monkeypatch.setattr(runner, "WORK", tmp_path / "work")
+
+    class Broken(NoMemory):
+        def recall(self, *a, **k):
+            raise SystemExit("retriever missing")
+    t = load("billing-03")
+    try:
+        runner.run_episode(t, "a", 1, StubClient(EvalStub(t)), "stub", {"none": Broken()}, tmp_path / "run", None)
+    except SystemExit:
+        pass
+    assert list((tmp_path / "work" / "w").iterdir()) == []

@@ -30,24 +30,24 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
     ep_id = f"{task.id}__{cond}__e{epoch}"
     ep_dir = run_dir / "episodes" / ep_id
     ws_dir = WORK / "w" / uuid.uuid4().hex[:12] / task.repo
-    write_tree(task.base_state(), ws_dir)
-    ws = Workspace(ws_dir, task.lang, pid_dir=WORK / "pids")
-    if name == "oracle":
-        provider = Oracle(task.lessons)
-    elif name == "pull":  # per-episode wrapper over the shared index, so search calls aren't mixed across threads
-        provider = Pull(providers["pull"].index, providers["pull"].budget)
-    else:
-        provider = providers[name]
-    workspace = {"repo": task.repo, "branch": task.branch}
-    recall = provider.recall(task.prompt, "", workspace)
-    first = task.prompt + ("\n\n" + recall.block if recall.block else "")
-    pull = name == "pull"
-    tw = TranscriptWriter(ep_dir / "transcript.jsonl", str(uuid.uuid4()), f"/work/{task.repo}", task.branch)
-    ep = Episode(client=client, model=model, system=system_prompt(task.repo, task.branch, pull=pull),
-                 tools=tool_specs(pull=pull), ws=ws, meter=meter, transcript=tw,
-                 memory_search=provider.search if pull else None, limits=limits or Limits(), output_config=output_config)
-    t0 = time.monotonic()
-    try:
+    try:  # everything after the mkdir sits inside the try, so the finally always removes the workspace
+        write_tree(task.base_state(), ws_dir)
+        ws = Workspace(ws_dir, task.lang, pid_dir=WORK / "pids")
+        if name == "oracle":
+            provider = Oracle(task.lessons)
+        elif name == "pull":  # per-episode wrapper over the shared index, so search calls aren't mixed across threads
+            provider = Pull(providers["pull"].index, providers["pull"].budget)
+        else:
+            provider = providers[name]
+        workspace = {"repo": task.repo, "branch": task.branch}
+        recall = provider.recall(task.prompt, "", workspace)
+        first = task.prompt + ("\n\n" + recall.block if recall.block else "")
+        pull = name == "pull"
+        tw = TranscriptWriter(ep_dir / "transcript.jsonl", str(uuid.uuid4()), f"/work/{task.repo}", task.branch)
+        ep = Episode(client=client, model=model, system=system_prompt(task.repo, task.branch, pull=pull),
+                     tools=tool_specs(pull=pull), ws=ws, meter=meter, transcript=tw,
+                     memory_search=provider.search if pull else None, limits=limits or Limits(), output_config=output_config)
+        t0 = time.monotonic()
         try:
             stop = ep.user_turn(first)
         except Exception as exc:  # noqa: BLE001 - recorded, the run continues
