@@ -124,12 +124,15 @@ def test_analysis_runs_on_a_small_result_set(tmp_path):
                              "calls": 1, "reads_before_first_edit": 0, "seconds": 1.0, "memory_chars": 0,
                              "search_queries": [], "suspicious": []})
     (tmp_path / "results.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-    r = subprocess.run([sys.executable, "scripts/analyze.py", str(tmp_path)], capture_output=True, text=True,
+    (tmp_path / "corpus" / "billing-H1").mkdir(parents=True)
+    (tmp_path / "corpus" / "billing-H1" / "attempts.jsonl").write_text(json.dumps({"attempt": 1, "problem": "checks not graded: timeout"}) + "\n")
+    r = subprocess.run([sys.executable, "scripts/analyze.py", str(tmp_path), "--corpus", str(tmp_path / "corpus")], capture_output=True, text=True,
                        cwd=Path(__file__).resolve().parents[1])
     assert r.returncode == 0, r.stderr[-1500:]
     out = json.loads((tmp_path / "analysis.json").read_text())
     assert "random_10pct_seed0" in out["hand_check"] and out["family_A_benefit_M"]["A1"]["pairs"] == 20
     assert len(out["hand_check"]["S_tasks_a_vs_c_disagree"]) == 20
+    assert out["history_discarded_attempts"]["count"] == 1
     assert len(out["hand_check"]["random_10pct_seed0"]) == 20  # (240 scored - 40 on the disagreement list) // 10
     assert not [x for x in out["hand_check"]["random_10pct_seed0"] if x.startswith(("billing-06__a__", "billing-06__c__"))]
 
@@ -191,3 +194,60 @@ def test_workspace_is_removed_when_setup_fails(tmp_path, monkeypatch):
     except SystemExit:
         pass
     assert list((tmp_path / "work" / "w").iterdir()) == []
+
+
+def test_every_discarded_history_attempt_is_numbered_and_kept(tmp_path, monkeypatch):
+    from smb import history
+    from smb.memory.corpus import history_specs
+    from smb.stub import HistoryStub, StubClient
+    spec, out = history_specs()["billing-H1"], tmp_path / "hist"
+    d = out / "billing-H1"
+
+    class BadRequest(Exception):
+        status_code = 400
+
+    class FailsOnSecondCall(StubClient):
+        n = 0
+
+        def _create(self, **kw):
+            self.n += 1
+            if self.n == 2:
+                raise BadRequest("rejected")
+            return super()._create(**kw)
+
+    def stub():
+        return StubClient(HistoryStub({**spec, "id": "billing-H1"}))
+    with pytest.raises(BadRequest):  # attempt 1: an API error propagates, after its record is written
+        history.run_session("billing-H1", FailsOnSecondCall(HistoryStub({**spec, "id": "billing-H1"})), "stub", out)
+    real = history.grade_workspace
+    with monkeypatch.context() as m:  # attempt 2: checks can't be graded
+        m.setattr(history, "grade_workspace", lambda *a, **k: {**real(*a, **k), "status": "timeout"})
+        assert history.run_session("billing-H1", stub(), "stub", out)["complete"] is False
+    with monkeypatch.context() as m:  # attempt 3: killed mid-run, so it leaves a transcript and no record
+        m.setattr(history, "_not_kept", lambda *a, **k: None)
+        with pytest.raises(BadRequest):
+            history.run_session("billing-H1", FailsOnSecondCall(HistoryStub({**spec, "id": "billing-H1"})), "stub", out)
+    rec = history.run_session("billing-H1", stub(), "stub", out)  # attempt 4 is kept
+    assert rec["complete"] is True and rec["attempt"] == 4 and (d / "session.json").exists()
+    lines = [json.loads(l) for l in (d / "attempts.jsonl").read_text().splitlines()]
+    assert [l["attempt"] for l in lines] == [1, 2, 3]
+    assert lines[0]["problem"].startswith("error: BadRequest") and lines[1]["problem"] == "checks not graded: timeout"
+    assert lines[2]["problem"] == "ended without a record (process killed)"
+    assert all((d / f"attempt-{n}.transcript.jsonl").exists() for n in (1, 2, 3))
+
+
+def test_history_workspace_is_removed_when_setup_fails(tmp_path, monkeypatch):
+    from smb import history
+    from smb.stub import HistoryStub, StubClient
+    from smb.memory.corpus import history_specs
+    monkeypatch.setattr(history, "WORK", tmp_path / "work")
+
+    def broken(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(history, "TranscriptWriter", broken)
+    spec = history_specs()["billing-H1"]
+    with pytest.raises(OSError):
+        history.run_session("billing-H1", StubClient(HistoryStub({**spec, "id": "billing-H1"})), "stub", tmp_path / "hist")
+    assert list((tmp_path / "work" / "h").iterdir()) == []
+    line = json.loads((tmp_path / "hist" / "billing-H1" / "attempts.jsonl").read_text())
+    assert line["attempt"] == 1 and line["problem"] == "error: OSError: disk full"

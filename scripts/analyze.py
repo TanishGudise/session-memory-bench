@@ -107,6 +107,11 @@ def main() -> int:
                 c = json.loads(line)
                 chunk_source[c["id"]] = c["source"]
     res = {"episodes": len(rows), "excluded": [r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)]}
+    if a.corpus:  # history attempts that were discarded and re-drawn (PREREGISTRATION: reported with their causes)
+        att = {f.parent.name: [{"attempt": r.get("attempt"), "problem": r.get("problem")}
+                               for r in map(json.loads, f.read_text().splitlines())]
+               for f in sorted(Path(a.corpus).glob("*/attempts.jsonl"))}
+        res["history_discarded_attempts"] = {"count": sum(map(len, att.values())), "sessions": att}
     rates = {}
     for c in CONDITIONS:
         for f in FAMS + ["ALL"]:

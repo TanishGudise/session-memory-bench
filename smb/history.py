@@ -71,8 +71,18 @@ def review_message(spec: dict, failed_checks: set[str]) -> tuple[str, list[dict]
     return text, posted
 
 
+def _attempt_numbers(sess_dir: Path) -> list[int]:
+    return [int(p.name.split(".")[0].split("-")[1]) for p in sess_dir.glob("attempt-*.transcript.jsonl")]
+
+
+def _logged_attempts(sess_dir: Path) -> set[int]:
+    f = sess_dir / "attempts.jsonl"
+    return {json.loads(l).get("attempt") for l in f.read_text().splitlines() if l.strip()} if f.exists() else set()
+
+
 def _not_kept(sess_dir: Path, record: dict) -> None:
-    """Record an attempt that stays out of the corpus; attempts.jsonl keeps every one, for the write-up's count."""
+    """Record an attempt that stays out of the corpus; attempts.jsonl gets one line per discarded attempt."""
+    sess_dir.mkdir(parents=True, exist_ok=True)
     (sess_dir / "session.partial.json").write_text(json.dumps(record, indent=2))
     with open(sess_dir / "attempts.jsonl", "a") as fh:
         fh.write(json.dumps(record) + "\n")
@@ -84,8 +94,12 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
     sess_dir = out_dir / sid
     earlier = sess_dir / "transcript.jsonl"
     if earlier.exists():  # an attempt that wasn't kept: its transcript stays beside the new one
-        n = len(list(sess_dir.glob("attempt-*.transcript.jsonl"))) + 1
+        n = 1 + max(_attempt_numbers(sess_dir), default=0)
         earlier.rename(sess_dir / f"attempt-{n}.transcript.jsonl")
+        if n not in _logged_attempts(sess_dir):  # the process was killed before it could write a record
+            _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": n, "complete": False,
+                                 "problem": "ended without a record (process killed)"})
+    attempt = 1 + max(_attempt_numbers(sess_dir), default=0) if sess_dir.exists() else 1
     ws_dir = WORK / "h" / uuid.uuid4().hex[:12] / spec["repo"]
     try:  # everything after the mkdir sits inside the try, so the finally always removes the workspace
         write_tree(task.base_state(), ws_dir)
@@ -106,7 +120,7 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
                 if checks["status"] not in ("graded", "collection_error"):
                     harness_problem = f"checks not graded: {checks['status']}"
         if harness_problem:  # never post review comments from a broken check run; keep the session out of the corpus
-            record = {"id": sid, "repo": spec["repo"], "stop_task": stop_task, "stop_review": None, "checks_failed": [],
+            record = {"id": sid, "repo": spec["repo"], "attempt": attempt, "stop_task": stop_task, "stop_review": None, "checks_failed": [],
                       "complete": False, "problem": harness_problem, "calls": ep.calls, "usage": dict(ep.usage),
                       "cost": round(ep.cost, 6)}
             _not_kept(sess_dir, record)
@@ -116,7 +130,7 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
         ep.limits = REVISION_LIMITS
         stop_review = ep.user_turn(text)
         record = {
-            "id": sid, "repo": spec["repo"], "date": str(spec["date"]), "author": spec["author"], "branch": spec["branch"],
+            "id": sid, "repo": spec["repo"], "attempt": attempt, "date": str(spec["date"]), "author": spec["author"], "branch": spec["branch"],
             "outcome": spec["outcome"], "model": model, "stop_task": stop_task, "stop_review": stop_review,
             "checks_status": (checks or {}).get("status"),
             "checks_failed": sorted(failed), "review_posted": [{"when": r["when"], "lessons": r["lessons"]} for r in posted],
@@ -132,5 +146,9 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
         else:
             _not_kept(sess_dir, record)
         return record
+    except BaseException as exc:  # an API error, a harness failure or Ctrl-C: record the attempt, then let it propagate
+        _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": attempt, "complete": False,
+                             "problem": f"error: {type(exc).__name__}: {exc}"[:300]})
+        raise
     finally:
         shutil.rmtree(ws_dir.parent, ignore_errors=True)
