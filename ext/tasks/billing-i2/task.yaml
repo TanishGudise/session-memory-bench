@@ -1,0 +1,14 @@
+id: billing-i2
+repo: billing
+family: S-i
+lessons: [billing.refund-approver-over-250, billing.gateway-idempotency]
+stale_lessons: [billing.refund-second-approver]
+author: Marco
+branch: marco/support-refunds
+prompt: |
+  Support needs to issue refunds. Add `refund_invoice(store, gateway, invoice_id, cents, requested_by, approved_by=None)` in a new module billing/refunds.py: refund `cents` to the invoice's customer through the gateway, record it with `Store.record_refund`, and return the gateway's refund id.
+editable: ["billing/**", "tests/**"]
+# The prompt and functional tests are billing-04's. The rule changed only in chat-billing-1007 (ext/chat.yaml);
+# main's code doesn't show the change. stale_rule is billing-04's reference solution (the old rule).
+based_on: billing-04
+change_source: chat-billing-1007

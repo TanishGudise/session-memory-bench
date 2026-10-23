@@ -51,7 +51,7 @@ from smb.stub import EvalStub, HistoryStub, StubClient  # noqa: E402
 from smb.tasks import all_tasks  # noqa: E402
 
 TOTAL_CAP = 17.50
-STAGE_CAPS = {"pilot": 1.50, "history": 1.00, "main": 12.00, "sonnet": 3.00}
+STAGE_CAPS = {"pilot": 1.50, "history": 1.00, "main": 12.00, "sonnet": 3.00, "ext": 3.00}  # ext: ext/ADDENDUM.md
 MODELS = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5"}
 
 
@@ -186,8 +186,8 @@ def cmd_eval(a, s: Session):
     run_dir = RUNS / "eval" / a.run
     cm, blobs = load_frozen(corpus_dir)
     corpus_sha = cm["sha256"]
-    if a.stage in ("main", "sonnet") and cm["repos"] != ["billing", "ingest", "inventory", "notify"]:
-        raise SystemExit("the main and Sonnet stages need the corpus of all four repos frozen")
+    if a.stage in ("main", "sonnet", "ext") and cm["repos"] != ["billing", "ingest", "inventory", "notify"]:
+        raise SystemExit("the main, Sonnet and ext stages need the corpus of all four repos frozen")
     meter = meter_for(run_dir, a.stage, a.stub)
     model = "stub" if a.stub else MODELS[a.model]
     run_info = {"corpus": a.corpus, "corpus_sha256": corpus_sha, "model": model, "stage": a.stage,
@@ -233,6 +233,7 @@ def main() -> int:
         p.add_argument("--stub", action="store_true")
         p.add_argument("--model", default="haiku", choices=sorted(MODELS))
         p.add_argument("--repos", nargs="*", default=["billing", "notify", "inventory", "ingest"])
+        p.add_argument("--ext", action="store_true", help="the invisible-change extension (ext/ADDENDUM.md)")
         if name != "freeze-corpus":
             p.add_argument("--stage", choices=sorted(STAGE_CAPS), required=True)
         else:
@@ -246,7 +247,13 @@ def main() -> int:
             p.add_argument("--tasks", nargs="*")
             p.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()
-    allowed = {"history": ("pilot", "history"), "distill": ("pilot", "history"), "eval": ("pilot", "main", "sonnet")}
+    if a.ext:
+        os.environ["SMB_EXT"] = "1"  # read at call time by lessons(), chat_messages() and the task loader
+        if a.cmd in ("history", "distill") or (a.cmd == "eval" and a.stage != "ext"):
+            raise SystemExit("--ext adds no history: it freezes an extension corpus and runs eval in stage ext")
+    elif getattr(a, "stage", None) == "ext":
+        raise SystemExit("stage ext needs --ext")
+    allowed = {"history": ("pilot", "history"), "distill": ("pilot", "history"), "eval": ("pilot", "main", "sonnet", "ext")}
     if a.cmd in allowed and a.stage not in allowed[a.cmd]:
         raise SystemExit(f"{a.cmd} runs in stage {' or '.join(allowed[a.cmd])}, not {a.stage}")
     if a.cmd in ("history", "distill") and ((a.stage == "pilot" and sorted(a.repos) != ["billing"])

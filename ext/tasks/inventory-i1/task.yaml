@@ -1,0 +1,14 @@
+id: inventory-i1
+repo: inventory
+family: S-i
+lessons: [inventory.bramblecote-cases-12]
+stale_lessons: [inventory.bramblecote-cases]
+author: Kenji
+branch: kenji/bramblecote-asn
+prompt: |
+  We're onboarding Bramblecote's advance shipping notices. Add `receiveBramblecoteAsn(db, warehouse, asn)` in a new file src/bramblecote.ts that books a Bramblecote ASN into stock at `warehouse`. An ASN looks like `{ supplier: "Bramblecote", asnId: "BC-1009", lines: [{ sku: "MUG-1", qty: 3 }, ...] }`.
+editable: ["src/**", "test/**"]
+# The prompt and functional tests are inventory-02's. The rule changed only in chat-ops-1005 (ext/chat.yaml);
+# main's code doesn't show the change. stale_rule is inventory-02's reference solution (the old rule).
+based_on: inventory-02
+change_source: chat-ops-1005

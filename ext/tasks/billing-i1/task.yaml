@@ -1,0 +1,14 @@
+id: billing-i1
+repo: billing
+family: S-i
+lessons: [billing.no-dunning-under-5]
+stale_lessons: [billing.no-dunning-under-1]
+author: Nadia
+branch: nadia/payment-reminders
+prompt: |
+  Support wants automated payment reminders. Add `dunning_candidates(store, today)` in a new module billing/dunning.py. It returns the ids of the invoices we should send a reminder for today: open invoices with a balance that are at least 7 days past their due date and haven't been reminded in the last 7 days (`reminded_at`), oldest due date first.
+editable: ["billing/**", "tests/**"]
+# The prompt and functional tests are billing-03's. The rule changed only in chat-support-1006 (ext/chat.yaml);
+# main's code doesn't show the change. stale_rule is billing-03's reference solution (the old rule).
+based_on: billing-03
+change_source: chat-support-1006

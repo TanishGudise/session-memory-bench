@@ -1,0 +1,38 @@
+# Extension chat messages (ext/ADDENDUM.md): each changes a rule that earlier memory states, and nothing in the
+# code the agent reads shows the change. Added to the main chat only when SMB_EXT=1.
+messages:
+  - id: chat-ops-1005
+    date: 2026-10-05
+    channel: "#ops"
+    author: Kenji
+    lessons: [inventory.bramblecote-cases-12]
+    text: |
+      Heads-up from receiving: Bramblecote's new ASNs (from this week) count cases of 12 units, not 6. Anything that books Bramblecote ASNs has to multiply their quantities by 12.
+  - id: chat-support-1006
+    date: 2026-10-06
+    channel: "#support"
+    author: Nadia
+    lessons: [billing.no-dunning-under-5]
+    text: |
+      Support decision: we're raising the reminder floor. No payment reminders (dunning) for balances under $5.00 (500 cents) from now on; smaller balances get written off at month end.
+  - id: chat-billing-1007
+    date: 2026-10-07
+    channel: "#billing"
+    author: Priya
+    lessons: [billing.refund-approver-over-250]
+    text: |
+      Audit follow-up: the second-approver threshold for refunds drops to $250.00. Any refund over $250.00 needs a second approver who isn't the person who requested it, starting now.
+  - id: chat-compliance-1008
+    date: 2026-10-08
+    channel: "#compliance"
+    author: Lena
+    lessons: [notify.quiet-hours-21-10]
+    text: |
+      Compliance update after the carrier audit: marketing SMS quiet hours are now 21:00 to 10:00 in the recipient's own time zone (it was 20:00 to 09:00). Transactional messages are unaffected.
+  - id: chat-ops-1009
+    date: 2026-10-09
+    channel: "#ops"
+    author: Rosa
+    lessons: [inventory.ewr-returns-only]
+    text: |
+      Update: RNO ships customer orders again from today. EWR is now our returns-only location while its dock is rebuilt: never allocate customer orders from EWR stock, even when it has the most units.

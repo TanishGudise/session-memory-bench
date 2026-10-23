@@ -1,0 +1,14 @@
+id: inventory-i2
+repo: inventory
+family: S-i
+lessons: [inventory.ewr-returns-only]
+stale_lessons: [inventory.rno-returns-only]
+author: Mei
+branch: mei/allocate-orders
+prompt: |
+  Add `allocate(db, sku, units)` in a new file src/allocate.ts that decides which warehouses ship a customer order: take as much as possible from the warehouse with the most units of the SKU, then the next one, and so on. Return the plan as `[{ warehouse, units }]` (it doesn't change stock). Throw `InsufficientStock` (from src/stock.ts) if the order can't be covered.
+editable: ["src/**", "test/**"]
+# The prompt and functional tests are inventory-03's. The rule changed only in chat-ops-1009 (ext/chat.yaml);
+# main's code doesn't show the change. stale_rule is inventory-03's reference solution (the old rule).
+based_on: inventory-03
+change_source: chat-ops-1009

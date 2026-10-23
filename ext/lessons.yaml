@@ -1,0 +1,42 @@
+# Extension lessons (ext/ADDENDUM.md): the current rules, stated only in a later chat message. `evidence` lists
+# patterns that would show the rule in code; scripts/validate_ext.py checks that main has none of them.
+inventory.bramblecote-cases-12:
+  kind: invisible
+  source: [chat-ops-1005]
+  spans:
+    chat-ops-1005: ["Bramblecote's new ASNs (from this week) count cases of 12 units, not 6"]
+  note: "Since 2026-10-05 Bramblecote's ASN quantities are cases of 12 units (was 6); multiply them by 12 when receiving."
+  patterns: ["cases of 12", "by 12"]
+  evidence: ["Bramblecote", "cases? of 12", "12 units"]
+billing.no-dunning-under-5:
+  kind: invisible
+  source: [chat-support-1006]
+  spans:
+    chat-support-1006: ["No payment reminders (dunning) for balances under $5.00 (500 cents) from now on"]
+  note: "Since 2026-10-06 no payment reminders (dunning) for balances under $5.00 (500 cents); the floor was $1.00."
+  patterns: ["under \\$5\\.00", "500 cents"]
+  evidence: ["under \\$5", "5\\.00", "dunning", "reminder"]
+billing.refund-approver-over-250:
+  kind: invisible
+  source: [chat-billing-1007]
+  spans:
+    chat-billing-1007: ["Any refund over $250.00 needs a second approver who isn't the person who requested it"]
+  note: "Since 2026-10-07 refunds over $250.00 (25000 cents) need a second approver who is not the requester; the threshold was $500.00."
+  patterns: ["over \\$250", "250\\.00"]
+  evidence: ["25000", "250\\.00", "approver"]
+notify.quiet-hours-21-10:
+  kind: invisible
+  source: [chat-compliance-1008]
+  spans:
+    chat-compliance-1008: ["marketing SMS quiet hours are now 21:00 to 10:00 in the recipient's own time zone"]
+  note: "Since 2026-10-08 no marketing SMS between 21:00 and 10:00 in the recipient's own time zone (was 20:00-09:00); transactional messages may go out at any hour."
+  patterns: ["21:00 to 10:00", "21:00-10:00"]
+  evidence: ["21:00", "10:00", "quiet"]
+inventory.ewr-returns-only:
+  kind: invisible
+  source: [chat-ops-1009]
+  spans:
+    chat-ops-1009: ["EWR is now our returns-only location while its dock is rebuilt: never allocate customer orders from EWR stock"]
+  note: "Since 2026-10-09 EWR is a returns-only location and RNO ships again: never allocate customer orders from EWR stock."
+  patterns: ["EWR is now our returns-only", "from EWR stock"]
+  evidence: ["returns-only", "returns only"]

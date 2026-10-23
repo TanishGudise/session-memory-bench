@@ -16,14 +16,15 @@ from pathlib import Path
 
 import yaml
 
-from smb.paths import HISTORY, ROOT
+from smb.paths import EXT, HISTORY, ROOT, ext_on
 from smb.transcript import read as read_transcript
 
 MAX_CHUNK = 1600
 SPAN_WINDOW = 60
 TOOL_INPUT_CLIP = 600
 TOOL_RESULT_CLIP = 400
-CHANNEL_REPO = {"#billing": "billing", "#brand": "notify", "#ops": "inventory", "#eng": ""}
+CHANNEL_REPO = {"#billing": "billing", "#brand": "notify", "#ops": "inventory", "#eng": "", "#support": "billing",
+                "#compliance": "notify"}
 
 
 @dataclass
@@ -46,7 +47,12 @@ class Chunk:
 
 
 def lessons() -> dict:
-    return yaml.safe_load((ROOT / "lessons.yaml").read_text())
+    out = yaml.safe_load((ROOT / "lessons.yaml").read_text())
+    if ext_on():
+        extra = yaml.safe_load((EXT / "lessons.yaml").read_text())
+        assert not set(extra) & set(out), "extension lessons must have new ids"
+        out.update(extra)
+    return out
 
 
 def history_specs() -> dict[str, dict]:
@@ -61,7 +67,10 @@ def history_specs() -> dict[str, dict]:
 
 
 def chat_messages() -> list[dict]:
-    return yaml.safe_load((HISTORY / "chat.yaml").read_text())["messages"]
+    msgs = yaml.safe_load((HISTORY / "chat.yaml").read_text())["messages"]
+    if ext_on():
+        msgs = msgs + yaml.safe_load((EXT / "chat.yaml").read_text())["messages"]
+    return msgs
 
 
 def source_texts() -> dict[str, list[tuple[list[str], str]]]:

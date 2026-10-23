@@ -6,10 +6,14 @@ from pathlib import Path
 
 import yaml
 
-from smb.paths import TASKS
+from smb.paths import EXT, TASKS, ext_on
 from smb.repos import main_state, repo_language
 
-FAMILIES = ("M", "D", "S-u", "S-s", "X", "C")
+FAMILIES = ("M", "D", "S-u", "S-s", "X", "C", "S-i")  # S-i: the extension's invisible changes (ext/ADDENDUM.md)
+
+
+def tasks_dir() -> Path:
+    return EXT / "tasks" if ext_on() else TASKS
 # Never taken from an agent's workspace, wherever they are (they change how tests are collected or run).
 FORBIDDEN_NAMES = {"conftest.py", "sitecustomize.py", "usercustomize.py", "pytest.ini", "pyproject.toml",
                    "setup.cfg", "tox.ini", "package.json", "tsconfig.json", ".npmrc"}
@@ -67,7 +71,7 @@ class Task:
 
 
 def load(task_id: str) -> Task:
-    path = TASKS / task_id
+    path = tasks_dir() / task_id
     d = yaml.safe_load((path / "task.yaml").read_text())
     known = {"id", "repo", "family", "lessons", "author", "branch", "prompt", "editable", "grader_tz"}
     t = Task(id=d["id"], repo=d["repo"], family=d["family"], lessons=list(d["lessons"]), author=d["author"],
@@ -78,4 +82,4 @@ def load(task_id: str) -> Task:
 
 
 def all_tasks() -> list[Task]:
-    return [load(p.name) for p in sorted(TASKS.iterdir()) if (p / "task.yaml").exists()]
+    return [load(p.name) for p in sorted(tasks_dir().iterdir()) if (p / "task.yaml").exists()]

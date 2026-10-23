@@ -1,0 +1,14 @@
+id: notify-i1
+repo: notify
+family: S-i
+lessons: [notify.quiet-hours-21-10]
+stale_lessons: [notify.quiet-hours]
+author: Lena
+branch: lena/promo-texts
+prompt: |
+  Marketing wants to send promo texts. Add `send_promo_sms(provider, users, text, now)` in a new module notify/promos.py: send `text` by SMS to every user who has a phone number and hasn't opted out of marketing, and return the ids of the users it was sent to. `now` is the current time as a timezone-aware datetime.
+editable: ["notify/**", "tests/**"]
+# The prompt and functional tests are notify-01's. The rule changed only in chat-compliance-1008 (ext/chat.yaml);
+# main's code doesn't show the change. stale_rule is notify-01's reference solution (the old rule).
+based_on: notify-01
+change_source: chat-compliance-1008

@@ -391,3 +391,29 @@ def test_attempt_records_survive_kills_torn_writes_and_late_interrupts(tmp_path,
         with pytest.raises(KeyboardInterrupt):
             run(out)
     assert lines(out) == [(1, "checks not graded: timeout")]
+
+
+def test_extension_switch_leaves_the_main_experiment_alone(monkeypatch):
+    from smb.memory.corpus import chat_messages, lessons
+    from smb.tasks import all_tasks
+    monkeypatch.delenv("SMB_EXT", raising=False)
+    main_tasks, main_lessons, main_chat = all_tasks(), lessons(), chat_messages()
+    assert len(main_tasks) == 32 and not any(t.family == "S-i" for t in main_tasks)
+    monkeypatch.setenv("SMB_EXT", "1")
+    ext_tasks, ext_lessons, ext_chat = all_tasks(), lessons(), chat_messages()
+    assert sorted(t.id for t in ext_tasks) == ["billing-i1", "billing-i2", "inventory-i1", "inventory-i2", "notify-i1"]
+    assert set(main_lessons) < set(ext_lessons) and all(ext_lessons[k] == v for k, v in main_lessons.items())
+    assert ext_chat[:len(main_chat)] == main_chat and len(ext_chat) == len(main_chat) + 5
+    monkeypatch.delenv("SMB_EXT")
+    assert len(all_tasks()) == 32
+
+
+def test_paid_refuses_mixed_ext_flags():
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    for args in (["eval", "--stub", "--stage", "ext", "--run", "x", "--corpus", "x"],
+                 ["eval", "--stub", "--ext", "--stage", "main", "--run", "x", "--corpus", "x"],
+                 ["history", "--stub", "--ext", "--stage", "history", "--corpus", "x", "--repos", "notify"]):
+        r = subprocess.run([sys.executable, "scripts/paid.py", *args], cwd=root, capture_output=True, text=True)
+        assert r.returncode != 0 and ("ext" in r.stderr), (args, r.stderr[-300:])

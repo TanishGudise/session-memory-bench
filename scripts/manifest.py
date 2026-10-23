@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-INCLUDE = ["repos", "tasks", "history", "smb", "scripts", "lessons.yaml", "PREREGISTRATION.md"]
+INCLUDE = ["repos", "tasks", "history", "smb", "scripts", "lessons.yaml", "PREREGISTRATION.md", "ext"]
 SKIP_PARTS = {"__pycache__", ".pytest_cache", "node_modules"}
 
 

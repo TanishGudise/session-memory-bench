@@ -71,6 +71,9 @@ class EvalStub:
         if t.family == "X":
             other = any(lesson_known(l, context) for l in t.extra.get("other_lessons", []))
             return "other_repo" if other and not known else "oracle"
+        if t.family == "S-i":  # the code shows neither rule: the stub follows whatever its memory holds, newest first
+            stale = any(lesson_known(l, context) for l in t.extra.get("stale_lessons", []))
+            return "oracle" if known else ("stale_rule" if stale else "visible_only")
         raise ValueError(t.family)
 
     def step(self, messages, tools):
