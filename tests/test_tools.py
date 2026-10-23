@@ -84,3 +84,43 @@ def test_unreadable_dirs_inner_links_and_slow_regex(ws, tmp_path):
     with pytest.raises(ToolError):
         ws.call("search_code", {"pattern": r"(a+)+$"})
     assert time.monotonic() - t0 < 30
+
+
+def test_swapping_dirs_and_files_for_links_never_leaks(ws, tmp_path):
+    import threading
+    outside = tmp_path.parent / f"outside-{os.getpid()}"
+    outside.mkdir(exist_ok=True)
+    (outside / "outside_secret.py").write_text("OUTSIDE_MARKER = 1\n")
+    (tmp_path / "zsub").mkdir()
+    (tmp_path / "zsub" / "inner.py").write_text("inner = 1\n")
+    (tmp_path / "victim.py").write_text("victim = 1\n")
+    stop = threading.Event()
+
+    def swapper():
+        while not stop.is_set():
+            for name, target in (("zsub", outside), ("victim.py", outside / "outside_secret.py")):
+                try:
+                    os.rename(tmp_path / name, tmp_path / (name + ".real"))
+                    os.symlink(target, tmp_path / name)
+                    os.unlink(tmp_path / name)
+                    os.rename(tmp_path / (name + ".real"), tmp_path / name)
+                except OSError:
+                    pass
+
+    t = threading.Thread(target=swapper, daemon=True)
+    t.start()
+    try:
+        for _ in range(150):
+            assert "outside_secret" not in ws.list_dir(".")
+            assert not any("OUTSIDE_MARKER" in d.decode() for d in ws.files().values())
+            try:
+                assert "OUTSIDE_MARKER" not in ws.read_file("victim.py")
+            except ToolError:
+                pass
+        for _ in range(15):
+            assert "OUTSIDE_MARKER" not in ws.search_code("OUTSIDE_MARKER|victim")
+    finally:
+        stop.set()
+        t.join(5)
+        import shutil
+        shutil.rmtree(outside, ignore_errors=True)

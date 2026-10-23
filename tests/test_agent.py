@@ -37,7 +37,7 @@ def test_tool_errors_are_returned_and_finish_stops(tmp_path):
                                 ([tu("finish", 3, summary="done")], "tool_use")])
     assert ep.user_turn("task") == "finished"
     results = ep.messages[2]["content"]
-    assert results[0]["is_error"] and "outside" in results[0]["content"]
+    assert results[0]["is_error"] and "not allowed" in results[0]["content"]
     assert (tmp_path / "ws" / "a.py").read_text() == "x=1"
     assert ep.summary == "done" and ep.calls == 2 and ep.first_edit_call == 1
     assert client.seen[0]["cache_control"] == {"type": "ephemeral"}

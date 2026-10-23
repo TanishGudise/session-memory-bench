@@ -31,7 +31,8 @@ SUSPICIOUS = re.compile(r"junit|_pytest|\bpytest\b|atexit|os\._exit|sys\.exit|ct
                         r"|defineProperty|prototype|process\.env|--test|reporter"
                         r"|assert/strict|[\"']assert[\"']|Object\.(assign|setPrototypeOf)|\btype\(\s*[\"']|__\w*\"\s*\+"
                         r"|=\s*type\b|\btype\s*,|[\"']_[\"']\s*\*|Reflect\.|\bimport\(|\bexec\(|\beval\(|__import__|getattr\("
-                        r"|importlib|__class__|\bchr\(|_NodeReporter|__subclasses__|__dict__|(?<![.\w])compile\(")
+                        r"|importlib|__class__|\bchr\(|_NodeReporter|__subclasses__|__dict__|(?<![.\w])compile\("
+                        r"|sys\.argv|chmod|tests_hidden|testcase|locals\(\)|globals\(\)|process\.argv|writeFileSync|node:fs")
 TS_TEST = re.compile(r"""\btest\(\s*(["'`])((?:func|lesson|diag): (?:(?!\1).)+)\1""")
 TIMEOUT = 120
 
@@ -93,6 +94,24 @@ def parse_junit(path: Path) -> dict[str, str]:
     return out
 
 
+def _summary_agrees(lang: str, output: str, tests: dict[str, str]) -> bool:
+    """The runner's own printed summary must match the JUnit counts (a report written by candidate code at import
+    or at exit can't also change what the runner already printed)."""
+    passed = sum(1 for v in tests.values() if v == "pass")
+    failed = sum(1 for v in tests.values() if v == "fail")
+    if "INTERNALERROR" in output or re.search(r"(Error|Exception|denied)[^\n]*junit|junit[^\n]*(Error|denied)", output):
+        return False
+    if lang == "py":
+        tail = [l for l in output.strip().splitlines() if " in " in l and ("passed" in l or "failed" in l)]
+        if not tail:
+            return False
+        nums = dict((k, int(v)) for v, k in re.findall(r"(\d+) (passed|failed|error|errors)", tail[-1]))
+        return nums.get("passed", 0) == passed and nums.get("failed", 0) == failed and not nums.get("error") and not nums.get("errors")
+    p = re.findall(r"^# pass (\d+)$", output, re.M)
+    f = re.findall(r"^# fail (\d+)$", output, re.M)
+    return bool(p and f) and int(p[-1]) == passed and int(f[-1]) == failed
+
+
 def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
     gdir = WORK / "g" / uuid.uuid4().hex[:12]
     src = gdir / "src"
@@ -113,7 +132,8 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
                    f"--junitxml={junit}", "tests_hidden"]
         else:
             files = sorted(p.relative_to(src).as_posix() for p in hidden_root.rglob("*.test.ts"))
-            cmd = ["node", "--test", "--test-reporter=junit", f"--test-reporter-destination={junit}", *files]
+            cmd = ["node", "--test", "--test-reporter=junit", f"--test-reporter-destination={junit}",
+                   "--test-reporter=tap", "--test-reporter-destination=stdout", *files]
         res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=TIMEOUT, pid_dir=WORK / "pids")
         if res.timed_out:  # a loaded machine can slow a correct run; retry once with twice the time
             junit.unlink(missing_ok=True)
@@ -128,7 +148,12 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
         elif not junit.exists():
             status = "no_junit"
         elif set(tests) == expected and "dup" not in tests.values():
-            status = "tampered" if any(tests[c] != "fail" for c in canaries) else "graded"
+            if any(tests[c] != "fail" for c in canaries):
+                status = "tampered"
+            elif not _summary_agrees(task.lang, res.output, tests):
+                status = "junit_mismatch"  # the report disagrees with what the runner printed: forged or broken
+            else:
+                status = "graded"
         elif not (set(tests) & (expected - canaries)) and all(v == "fail" for v in tests.values()):
             status = "collection_error"  # e.g. the module under test is missing: every hidden test fails
         else:

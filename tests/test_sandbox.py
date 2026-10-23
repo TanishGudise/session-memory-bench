@@ -93,3 +93,25 @@ def test_git_history_and_home_are_unreadable():
     finally:
         shutil.rmtree(own, ignore_errors=True)
         (WORK / f'home-probe-{os.getpid()}.txt').unlink(missing_ok=True)
+
+
+def test_processes_that_leave_the_session_are_reaped(tmp_path):
+    # the child starts its own session (escaping the run's process group) and records its exact pid
+    code = ("import subprocess, sys\n"
+            "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'], start_new_session=True)\n"
+            "open('child.pid', 'w').write(str(p.pid))\n")
+    _run(tmp_path, code)
+    pid = int((tmp_path / "w" / "child.pid").read_text())
+    import errno
+    alive = True
+    for _ in range(30):  # a killed orphan stays a zombie until launchd reaps it
+        try:
+            os.kill(pid, 0)
+        except OSError as exc:
+            if exc.errno == errno.ESRCH:
+                alive = False
+                break
+        time.sleep(0.1)
+    if alive:  # don't leave it behind if the reaper failed
+        os.kill(pid, 9)
+    assert not alive

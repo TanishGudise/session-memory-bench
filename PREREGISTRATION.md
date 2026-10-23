@@ -37,6 +37,8 @@ Registered 2026-10-22, before any model call. Changes after the first model call
   - Hidden tests run in a separate sandboxed process with no network. That process can write only in its grading directory, and it cannot read file contents anywhere under the home directory (including the benchmark, its git history and other workspaces) or in the shared temp directories (`/private/tmp`, `/private/var/tmp`, `/private/var/folders`). The exceptions are its own directory and the project's Python environment.
   - The JUnit test set must equal the hidden file's test set exactly.
   - Every run also includes tests that must fail: one per assertion helper (TypeScript), and a plain `assert` plus `pytest.raises` (Python). If any of them passes, something patched the assertions or the runner; the episode is marked tampered, scores 0, and is hand-checked.
+  - The runner's own printed summary (pytest's final line, node's TAP counts) must agree with the JUnit report. A report written by candidate code is marked `junit_mismatch` and scores 0.
+  - Candidate code that references the test machinery (the report, argv, assertion modules, dunder tricks) is flagged and hand-checked. A determined candidate could still forge a run; that residual risk is stated in section 7.
   - Graders run with `TZ=America/Los_Angeles`. A grading run that times out is retried once with twice the time.
 
 ## 2. Conditions
@@ -59,6 +61,10 @@ Same model, system prompt, task prompt, tools and budgets in every condition; on
   - `run_tests` runs the visible suite or one path, sandboxed like the graders, with `TZ=America/Los_Angeles`.
   - Agent mistakes go back to the agent as error results. That covers unknown tools, bad arguments, bad or non-regular paths, bad regular expressions, a search running longer than 10 seconds, and files or directories the agent's own code made unreadable (which are skipped). A failure of the harness itself, such as the retriever or the test sandbox failing to start, ends the episode as a harness error.
   - The file tools run on the host, inside the workspace only, and never follow or list symbolic links, even ones that point inside the workspace.
+  - Every open walks directory file descriptors with `O_NOFOLLOW`, so a path swapped for a link between two calls is not followed either.
+  - Files over 1 MB are refused by `read_file` and skipped by searches and by the grader's snapshot.
+  - `search_code` runs its regex in a sandboxed child process that receives the file contents, with a 10-second deadline.
+  - Processes that agent code leaves running outside the run's process group are killed after each run when they still hold its directory (best effort).
 - **Per episode.**
   - At most 30 model calls, `max_tokens` 8,000, prompt caching on, and the model's default effort.
   - A 10-minute wall clock, checked between calls; each call times out after 180 seconds.
@@ -94,6 +100,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
   - *retrieved, not applied*: every needed lesson was recalled, but a `lesson` test failed;
   - *other*.
 - **X tasks**, whose own rule lives only in the code. *followed the other repo's rule* (a `diag` test passed); *other*.
+- **C tasks.** *other*.
 - **What counts as recalled.**
   - b: the lesson's span is inside the injected block.
   - c and f: a recalled chunk carries a span (section 5).
@@ -137,7 +144,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - Main and every history start state pass their visible suites under `TZ=UTC`.
 - History checks behave as listed in `scripts/validate.py`.
 - Memory-only lessons have no evidence-pattern match in main.
-- No new oracle line of 25+ characters, generic or not, and no hidden-test string literal of 12+ characters appears in any memory text we wrote.
+- No new oracle line of 25+ characters, generic or not, and no hidden-test string literal of 12+ characters appears in any memory text we wrote. Imports, comments and anything already present in main are skipped.
 - The stub end-to-end run is clean: the no-memory stub scores 0 on M and D, and the oracle stub passes every task.
 
 **G2 (pilot)**

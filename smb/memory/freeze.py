@@ -135,6 +135,18 @@ def freeze(corpus_dir: Path, count_tokens: Callable[[str], int], allowed_leaks: 
     return manifest
 
 
+def load_frozen(corpus_dir: Path) -> tuple[dict, dict[str, bytes]]:
+    """Read every frozen file once, check those bytes against CORPUS_MANIFEST.json, and return them, so a run
+    builds its memory from exactly the bytes it verified."""
+    m = json.loads((corpus_dir / "CORPUS_MANIFEST.json").read_text())
+    blobs = {name: (corpus_dir / name).read_bytes() for name in FROZEN_FILES}
+    for name, data in blobs.items():
+        if hashlib.sha256(data).hexdigest() != m["files"][name]:
+            raise SystemExit(f"corpus {corpus_dir}: {name} differs from CORPUS_MANIFEST.json: refusing to run")
+    verify(corpus_dir)  # the sessions too
+    return m, blobs
+
+
 def verify(corpus_dir: Path) -> dict:
     m = json.loads((corpus_dir / "CORPUS_MANIFEST.json").read_text())
     if _hash_files(corpus_dir, m["sessions"]) != m["files"]:

@@ -20,12 +20,16 @@ def main() -> int:
     doc = json.loads(out.read_text()) if out.exists() else {"reviewed": False, "labeled_by": "", "labels": {}}
     ids = {n["id"] for n in notes}
     new = [n for n in notes if n["id"] not in doc["labels"]]
-    for n in new:  # notes from newly distilled sessions get the pattern labels as suggestions
-        doc["labels"][n["id"]] = n["pattern_lessons"]
-    doc["labels"] = {k: v for k, v in doc["labels"].items() if k in ids}
-    if new:
+    stale = [k for k in doc["labels"] if k not in ids]
+    if new or stale or not out.exists():  # only then is the file rewritten; viewing never touches it
+        manifest = corpus / "CORPUS_MANIFEST.json"
+        if manifest.exists() and not new and not stale:
+            raise SystemExit("corpus is frozen and its labels are complete; nothing to write")
+        for n in new:  # notes from newly distilled sessions get the pattern labels as suggestions
+            doc["labels"][n["id"]] = n["pattern_lessons"]
+        doc["labels"] = {k: v for k, v in doc["labels"].items() if k in ids}
         doc["reviewed"] = False
-    out.write_text(json.dumps(doc, indent=1))
+        out.write_text(json.dumps(doc, indent=1))
     labels = doc["labels"]
     print(f"{len(new)} new notes to review; reviewed={doc['reviewed']}")
     for n in notes:

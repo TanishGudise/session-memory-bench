@@ -201,5 +201,9 @@ def save(chunks: list[Chunk], path: Path) -> None:
             fh.write(json.dumps(asdict(c), ensure_ascii=False) + "\n")
 
 
+def loads(text: str) -> list[Chunk]:
+    return [Chunk(**json.loads(l)) for l in text.splitlines() if l.strip()]
+
+
 def load(path: Path) -> list[Chunk]:
-    return [Chunk(**json.loads(l)) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return loads(path.read_text(encoding="utf-8"))

@@ -41,8 +41,8 @@ from smb.envfile import load_env  # noqa: E402
 from smb.history import run_session  # noqa: E402
 from smb.memory import corpus as corpus_mod  # noqa: E402
 from smb.memory.distill import model_notes, session_text, stub_notes, write_notes  # noqa: E402
-from smb.memory.freeze import freeze, stub_labels, verify  # noqa: E402
-from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, distilled_index_chunks, estimate_tokens  # noqa: E402
+from smb.memory.freeze import freeze, load_frozen, stub_labels  # noqa: E402
+from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, distilled_index_chunks_from, estimate_tokens  # noqa: E402
 from smb.memory.retriever import Index  # noqa: E402
 from smb.meter import Meter  # noqa: E402
 from smb.paths import RUNS, WORK  # noqa: E402
@@ -174,7 +174,7 @@ def cmd_distill(a, s: Session):
 def cmd_eval(a, s: Session):
     corpus_dir = RUNS / "history" / a.corpus
     run_dir = RUNS / "eval" / a.run
-    cm = verify(corpus_dir)
+    cm, blobs = load_frozen(corpus_dir)
     corpus_sha = cm["sha256"]
     if a.stage in ("main", "sonnet") and cm["repos"] != ["billing", "ingest", "inventory", "notify"]:
         raise SystemExit("the main and Sonnet stages need the corpus of all four repos frozen")
@@ -188,10 +188,10 @@ def cmd_eval(a, s: Session):
             raise SystemExit(f"run {a.run} was started with {prev}; refusing to resume with {run_info}")
     else:
         (run_dir / "run.json").write_text(json.dumps(run_info))
-    chunks = corpus_mod.load(corpus_dir / "chunks.jsonl")
+    chunks = corpus_mod.loads(blobs["chunks.jsonl"].decode())
     idx = Index(chunks)
-    notes_idx = Index(distilled_index_chunks(corpus_dir), embedder=idx.embedder)
-    raw = FrozenRaw(json.loads((corpus_dir / "raw_blocks.json").read_text()))
+    notes_idx = Index(distilled_index_chunks_from(blobs, chunks), embedder=idx.embedder)
+    raw = FrozenRaw(json.loads(blobs["raw_blocks.json"]))
     providers = {"none": NoMemory(), "raw": raw, "retrieved": Retrieved(idx),
                  "distilled": Retrieved(notes_idx, budget_chars=3500), "pull": Pull(idx)}
     conds = a.conditions or list(CONDITIONS)

@@ -182,11 +182,20 @@ def distilled_index_chunks(corpus_dir: Path) -> list[Chunk]:
     return notes_as_chunks(corpus_dir / "notes.jsonl", corpus_dir / "notes_labels.json") + chat
 
 
+def distilled_index_chunks_from(blobs: dict[str, bytes], chunks: list[Chunk]) -> list[Chunk]:
+    """distilled_index_chunks from already-verified bytes (eval builds from exactly what it checked)."""
+    return notes_from_text(blobs["notes.jsonl"].decode(), json.loads(blobs["notes_labels.json"])) + \
+        [c for c in chunks if c.kind == "chat"]
+
+
 def notes_as_chunks(notes_path: Path, labels_path: Path) -> list[Chunk]:
     """Distilled notes as retrievable chunks, labelled with the frozen hand labels (notes_labels.json)."""
-    labels = json.loads(labels_path.read_text())
+    return notes_from_text(notes_path.read_text(encoding="utf-8"), json.loads(labels_path.read_text()))
+
+
+def notes_from_text(text: str, labels: dict) -> list[Chunk]:
     out = []
-    for line in notes_path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         if line.strip():
             n = json.loads(line)
             out.append(Chunk(id=n["id"], repo=n["repo"], source=n["source"], kind="note", date=n["date"],

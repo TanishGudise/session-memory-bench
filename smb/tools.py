@@ -3,6 +3,7 @@ run_tests executes agent-written code, so it runs sandboxed (no network, writes 
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -55,116 +56,217 @@ def _clip(text: str, limit: int = MAX_RESULT) -> str:
     return text if len(text) <= limit else text[:limit] + f"\n[truncated: {len(text)} characters in total]"
 
 
+MAX_FILE = 1_000_000          # bytes: bigger files are skipped by the walk and refused by read/search
+MAX_SEARCH_BYTES = 20_000_000
+_DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+_WORKER_SRC = (Path(__file__).with_name("search_worker.py")).read_text()  # passed with -c: the sandbox can't read smb/
+
+
 @dataclass
 class Workspace:
+    """Every host-side file access walks directory file descriptors from the workspace root with O_NOFOLLOW, so
+    no symbolic link is ever followed, even if agent code (or a process it left running) swaps a path for a link
+    between two calls."""
+
     root: Path
     lang: str  # "py" | "ts"
     pid_dir: Path | None = None
     test_runs: int = 0
     edits: list[str] = field(default_factory=list)
 
-    def _resolve(self, rel: str | None, must_exist: bool = True) -> Path:
+    # paths -------------------------------------------------------------------
+    @staticmethod
+    def _parts(rel: str | None) -> list[str]:
         rel = (rel or ".").strip()
         if rel.startswith("/") or rel.startswith("~"):
             raise ToolError("paths are relative to the repository root")
-        if ".." in Path(rel).parts:
-            raise ToolError("path is outside the repository")
-        cur = self.root
-        for part in Path(rel).parts:  # check the path as given, before resolving, so no link is ever followed
-            if part == ".":
-                continue
-            cur = cur / part
-            if cur.is_symlink():
-                raise ToolError("symlinks are not supported")
-        p = (self.root / rel).resolve()
-        root = self.root.resolve()
-        if p != root and root not in p.parents:
-            raise ToolError("path is outside the repository")
-        if must_exist and not p.exists():
-            raise ToolError(f"no such file or directory: {rel}")
-        return p
+        if "\x00" in rel:
+            raise ToolError("bad path")
+        parts = [x for x in rel.split("/") if x not in ("", ".")]
+        if ".." in parts:
+            raise ToolError("'..' is not allowed in paths")
+        return parts
 
-    def _walk(self, base: Path):
-        """Files and directories under base, never following or listing symlinks (agent code can create them) and
-        skipping anything unreadable."""
-        out = []
-        for dirpath, dirnames, filenames in os.walk(base, followlinks=False):  # os.walk skips unreadable dirs
-            d = Path(dirpath)
-            keep = []
-            for name in sorted(dirnames):
+    def _open_dir(self, parts: list[str], create: bool = False) -> int:
+        """fd of the directory at parts (relative to the root), opened component by component with O_NOFOLLOW."""
+        fd = os.open(self.root, _DIR_FLAGS)
+        try:
+            for part in parts:
                 try:
-                    if name not in SKIP and not (d / name).is_symlink():
-                        keep.append(name)
-                except OSError:
-                    continue
-            dirnames[:] = keep
-            for name in keep + sorted(filenames):
-                p = d / name
-                try:
-                    if p.is_symlink():
-                        continue
-                except OSError:
-                    continue
-                out.append((p, p.relative_to(self.root)))
-        return sorted(out, key=lambda x: x[1].as_posix())
+                    nfd = os.open(part, _DIR_FLAGS, dir_fd=fd)
+                except FileNotFoundError:
+                    if not create:
+                        raise
+                    os.mkdir(part, 0o755, dir_fd=fd)
+                    nfd = os.open(part, _DIR_FLAGS, dir_fd=fd)
+                os.close(fd)
+                fd = nfd
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
 
-    def files(self) -> dict[str, bytes]:
-        out = {}
-        for p, rel in self._walk(self.root):
+    @staticmethod
+    def _oserror(exc: OSError, path: str) -> ToolError:
+        if exc.errno in (errno.ELOOP, errno.EMLINK) or (exc.errno == errno.ENOTDIR and os.path.islink(exc.filename or "")):
+            return ToolError(f"symlinks are not supported: {path}")
+        if isinstance(exc, FileNotFoundError):
+            return ToolError(f"no such file or directory: {path}")
+        return ToolError(f"{type(exc).__name__}: {exc.strerror or exc}: {path}")
+
+    def _read_at(self, dir_fd: int, name: str, path: str) -> bytes:
+        try:
+            ffd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
+        except OSError as exc:
+            raise self._oserror(exc, path) from None
+        try:
+            st = os.fstat(ffd)
+            if not stat.S_ISREG(st.st_mode):
+                raise ToolError(f"not a regular file: {path}")
+            if st.st_size > MAX_FILE:
+                raise ToolError(f"file too large ({st.st_size} bytes): {path}")
+            chunks, total = [], 0
+            while True:
+                b = os.read(ffd, 1 << 16)
+                if not b:
+                    return b"".join(chunks)
+                total += len(b)
+                if total > MAX_FILE:
+                    raise ToolError(f"file too large: {path}")
+                chunks.append(b)
+        finally:
+            os.close(ffd)
+
+    def _read(self, path: str) -> bytes:
+        parts = self._parts(path)
+        if not parts or set(parts) & SKIP:
+            raise ToolError(f"not a file: {path}")
+        try:
+            dfd = self._open_dir(parts[:-1])
+        except OSError as exc:
+            raise self._oserror(exc, path) from None
+        try:
+            return self._read_at(dfd, parts[-1], path)
+        finally:
+            os.close(dfd)
+
+    def _write(self, path: str, data: bytes) -> None:
+        parts = self._parts(path)
+        if not parts or set(parts) & SKIP:
+            raise ToolError(f"can't write: {path}")
+        try:
+            dfd = self._open_dir(parts[:-1], create=True)
+        except OSError as exc:
+            raise self._oserror(exc, path) from None
+        try:
             try:
-                if stat.S_ISREG(p.lstat().st_mode):
-                    out[rel.as_posix()] = p.read_bytes()
-            except OSError:  # e.g. a file the agent's own code made unreadable
-                continue
+                ffd = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644, dir_fd=dfd)
+            except OSError as exc:
+                raise self._oserror(exc, path) from None
+            try:
+                if not stat.S_ISREG(os.fstat(ffd).st_mode):
+                    raise ToolError(f"not a regular file: {path}")
+                os.ftruncate(ffd, 0)
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(ffd, view):]
+            finally:
+                os.close(ffd)
+        finally:
+            os.close(dfd)
+        self.edits.append("/".join(parts))
+
+    def _scan(self, parts: list[str], read: bool) -> list[tuple[str, bool, bytes | None]]:
+        """(relative path, is_dir, content) under parts; links never followed, unreadable or huge entries skipped."""
+        out: list[tuple[str, bool, bytes | None]] = []
+        if set(parts) & SKIP:
+            return out
+        try:
+            top = self._open_dir(parts)
+        except OSError:
+            return out
+
+        def walk(fd: int, prefix: list[str]) -> None:
+            try:
+                entries = sorted(os.scandir(fd), key=lambda e: e.name)
+            except OSError:
+                return
+            for e in entries:
+                if e.name in SKIP:
+                    continue
+                rel = "/".join(prefix + [e.name])
+                try:
+                    if e.is_symlink():
+                        continue
+                    if e.is_dir(follow_symlinks=False):
+                        try:
+                            nfd = os.open(e.name, _DIR_FLAGS, dir_fd=fd)  # fails if swapped for a link meanwhile
+                        except OSError:
+                            continue
+                        out.append((rel, True, None))
+                        try:
+                            walk(nfd, prefix + [e.name])
+                        finally:
+                            os.close(nfd)
+                    elif e.is_file(follow_symlinks=False):
+                        data = None
+                        if read:
+                            try:
+                                data = self._read_at(fd, e.name, rel)
+                            except ToolError:
+                                continue
+                        out.append((rel, False, data))
+                except OSError:
+                    continue
+
+        try:
+            walk(top, list(parts))
+        finally:
+            os.close(top)
         return out
 
-    # tools -----------------------------------------------------------------
+    def files(self) -> dict[str, bytes]:
+        return {rel: data for rel, is_dir, data in self._scan([], read=True) if not is_dir and data is not None}
+
+    # tools -------------------------------------------------------------------
     def list_dir(self, path: str = ".") -> str:
-        base = self._resolve(path)
-        if not base.is_dir():
-            raise ToolError(f"not a directory: {path}")
-        entries = []
-        for p, rel in self._walk(base):
-            try:
-                is_dir = p.is_dir()
-            except OSError:
-                continue
-            entries.append(rel.as_posix() + ("/" if is_dir else ""))
-            if len(entries) >= 200:
-                entries.append("[more entries not shown]")
-                break
+        parts = self._parts(path)
+        try:
+            os.close(self._open_dir(parts))
+        except OSError as exc:
+            raise self._oserror(exc, path) from None
+        entries = [rel + ("/" if is_dir else "") for rel, is_dir, _ in self._scan(parts, read=False)]
+        if len(entries) > 200:
+            entries = entries[:200] + ["[more entries not shown]"]
         return "\n".join(entries) or "(empty)"
 
-    def _regular(self, p: Path, path: str) -> None:
-        if p.exists() and not stat.S_ISREG(p.lstat().st_mode):
-            raise ToolError(f"not a regular file: {path}")
-
     def read_file(self, path: str) -> str:
-        p = self._resolve(path)
-        if not p.is_file():
-            raise ToolError(f"not a file: {path}")
-        self._regular(p, path)
-        return _clip(p.read_text(encoding="utf-8", errors="replace"))
+        return _clip(self._read(path).decode("utf-8", errors="replace"))
 
     def search_code(self, pattern: str, path: str = ".") -> str:
         try:
-            rx = re.compile(pattern)
+            re.compile(pattern)
         except (re.error, OverflowError, RecursionError) as exc:
             raise ToolError(f"bad regular expression: {exc}")
-        base = self._resolve(path)
-        candidates = self._walk(base) if base.is_dir() else [(base, base.relative_to(self.root))]
-        files = []
-        for p, rel in candidates:
-            try:
-                if stat.S_ISREG(p.lstat().st_mode):
-                    files.append([str(p), rel.as_posix()])
-            except OSError:
-                continue
-        # the regex runs in a child process with a deadline: a catastrophic pattern can't hang the episode
+        parts = self._parts(path)
         try:
-            r = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("search_worker.py"))],
-                               input=json.dumps({"pattern": pattern, "files": files}), capture_output=True, text=True,
-                               timeout=SEARCH_TIMEOUT)
+            os.close(self._open_dir(parts))
+            files = [(rel, data) for rel, is_dir, data in self._scan(parts, read=True) if not is_dir and data is not None]
+        except NotADirectoryError:
+            files = [("/".join(parts), self._read(path))]
+        except OSError as exc:
+            raise self._oserror(exc, path) from None
+        payload, total = [], 0
+        for rel, data in files:
+            total += len(data)
+            if total > MAX_SEARCH_BYTES:
+                break
+            payload.append([rel, data.decode("utf-8", errors="replace")])
+        # the regex runs in a sandboxed child process with a deadline; it gets the contents, never paths to open
+        cmd = ["/usr/bin/sandbox-exec", "-p", sandbox.profile(self.root), sys.executable, "-I", "-c", _WORKER_SRC]
+        try:
+            r = subprocess.run(cmd, input=json.dumps({"pattern": pattern, "files": payload}), capture_output=True,
+                               text=True, timeout=SEARCH_TIMEOUT, env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
         except subprocess.TimeoutExpired:
             raise ToolError(f"search took longer than {SEARCH_TIMEOUT} s; use a simpler pattern")
         if r.returncode != 0:
@@ -175,26 +277,29 @@ class Workspace:
         return "\n".join(hits) or "no matches"
 
     def write_file(self, path: str, content: str) -> str:
-        p = self._resolve(path, must_exist=False)
-        self._regular(p, path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        self.edits.append(p.relative_to(self.root).as_posix())
+        self._write(path, content.encode("utf-8"))
         return f"wrote {len(content)} characters to {path}"
 
     def replace_in_file(self, path: str, old_text: str, new_text: str) -> str:
-        p = self._resolve(path)
-        self._regular(p, path)
-        text = p.read_text(encoding="utf-8")
+        text = self._read(path).decode("utf-8")
         n = text.count(old_text)
         if n != 1:
             raise ToolError(f"old_text occurs {n} times in {path}; it must occur exactly once")
-        p.write_text(text.replace(old_text, new_text), encoding="utf-8")
-        self.edits.append(p.relative_to(self.root).as_posix())
+        self._write(path, text.replace(old_text, new_text).encode("utf-8"))
         return f"replaced 1 occurrence in {path}"
 
     def run_tests(self, path: str | None = None) -> str:
-        target = [] if not path else [self._resolve(path).relative_to(self.root).as_posix()]
+        target = []
+        if path:
+            parts = self._parts(path)
+            try:
+                os.close(self._open_dir(parts[:-1]))
+                os.lstat(os.path.join(self.root, *parts))
+                if os.path.islink(os.path.join(self.root, *parts)):
+                    raise ToolError(f"symlinks are not supported: {path}")
+            except OSError as exc:
+                raise self._oserror(exc, path) from None
+            target = ["/".join(parts)]
         self.test_runs += 1
         env = sandbox.base_env(self.root / ".home", DEV_TZ)
         if self.lang == "py":
@@ -207,28 +312,21 @@ class Workspace:
         return f"{note}exit code {res.code}\n{tail}"
 
     def call(self, name: str, args: dict) -> str:
-        """Agent mistakes (unknown tool, bad arguments, bad paths, unreadable files) raise ToolError. A failure to
-        start the sandboxed test run is the harness's and propagates."""
+        """Agent mistakes (unknown tool, bad arguments, bad paths, unreadable or oversized files) raise ToolError.
+        A failure to start the sandboxed test run is the harness's and propagates."""
         fn = {"list_dir": self.list_dir, "read_file": self.read_file, "search_code": self.search_code,
               "write_file": self.write_file, "replace_in_file": self.replace_in_file, "run_tests": self.run_tests}.get(name)
         if fn is None:
             raise ToolError(f"unknown tool {name}")
         if any(not isinstance(v, str) for v in args.values()):
             raise ToolError("tool arguments must be strings")
-        if name == "run_tests":
-            target = args.get("path")
-            if target is not None:
-                try:
-                    self._resolve(target)
-                except (OSError, ValueError) as exc:
-                    raise ToolError(f"bad path: {type(exc).__name__}: {exc}") from None
-            try:
-                return fn(**args)
-            except TypeError as exc:
-                raise ToolError(f"bad arguments: {exc}") from None
         try:
             return fn(**args)
         except TypeError as exc:
             raise ToolError(f"bad arguments: {exc}") from None
-        except (OSError, UnicodeError, ValueError, OverflowError, RecursionError, re.error) as exc:
+        except (UnicodeError, ValueError, OverflowError, RecursionError, MemoryError) as exc:
+            raise ToolError(f"{type(exc).__name__}: {exc}") from None
+        except OSError as exc:
+            if name == "run_tests":
+                raise  # the sandbox failed to start: a harness error
             raise ToolError(f"{type(exc).__name__}: {exc}") from None

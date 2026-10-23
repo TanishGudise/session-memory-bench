@@ -45,6 +45,7 @@ The design, metrics and stop rules were registered before any model call: [PRERE
    - A chunk carries a lesson when it contains at least 60 consecutive characters of the sentence that states the rule.
    - Distilled notes carry the lessons a person assigned to them before the run.
    - Stale and superseded tasks add *old rule recalled, not followed* and *current rule recalled, not applied*.
+   - Episodes that were never graded are reported as *not graded* with their status (for example a missing module, or a tampered run). Ones that didn't finish are reported as *unfinished* with their stop reason.
 
 ## Results
 
@@ -106,7 +107,10 @@ Paid stages read the API key from a gitignored `.env`.
 - All model traffic goes through a loopback proxy that allows only the API host, and the run process can open loopback connections only.
 - Agent code, graders and the embedder run sandboxed. They get no network, and they can't read file contents under the home directory (the benchmark, its git history, other workspaces) or the shared temp dirs. The exceptions are their own directory, the project's Python environment and, for the embedder, its interpreter, model and server script.
 - The agent's file tools never follow or list symbolic links, even ones inside the workspace.
-- Every grading run includes tests that must fail, so a blanket patch of an assertion helper, `pytest.raises` or the runner's assertions is caught. Other tampering is flagged by static patterns and checked by hand.
+- Every grading run includes tests that must fail, so a blanket patch of an assertion helper or `pytest.raises` is caught.
+- The runner's printed summary must agree with the JUnit report.
+- Some other tampering is flagged by static patterns and checked by hand.
+- A determined candidate could still forge a run (see Limits).
 - Every request, including every retry, reserves its worst-case cost against its stage's cap before it is sent. A request that may have been billed without returning usage is booked at that worst case.
 
 ## Limits

@@ -77,6 +77,7 @@ def run(cmd: list[str], cwd: Path, write_root: Path, env: dict[str, str], timeou
             os.killpg(proc.pid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             pass
+        _reap_escaped(write_root)
         if pid_file is not None:
             pid_file.unlink(missing_ok=True)
     data = out_path.read_bytes()
@@ -86,6 +87,24 @@ def run(cmd: list[str], cwd: Path, write_root: Path, env: dict[str, str], timeou
         text += f"\n[output truncated: {len(data)} bytes]"
     return Result(code=124 if timed_out.is_set() else code, output=text, timed_out=timed_out.is_set(),
                   seconds=time.monotonic() - t0)
+
+
+def _reap_escaped(write_root: Path) -> None:
+    """Best effort: kill processes that left the run's process group (setsid) but still have their working
+    directory or an open file inside the run's directory (lsof). Host-side file tools don't rely on this: they
+    never follow links, and sandboxed processes can't read or write outside their own directory anyway."""
+    try:
+        out = subprocess.run(["/usr/sbin/lsof", "-t", "+D", str(write_root)], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    me = os.getpid()
+    for tok in out.split():
+        try:
+            pid = int(tok)
+            if pid != me:
+                os.kill(pid, signal.SIGKILL)
+        except (ValueError, ProcessLookupError, PermissionError):
+            continue
 
 
 def base_env(home: Path, tz: str) -> dict[str, str]:
