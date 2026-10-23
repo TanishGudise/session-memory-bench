@@ -58,6 +58,7 @@ def _clip(text: str, limit: int = MAX_RESULT) -> str:
 
 MAX_FILE = 1_000_000          # bytes: bigger files are skipped by the walk and refused by read/search
 MAX_SEARCH_BYTES = 20_000_000
+MAX_DEPTH = 64
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _WORKER_SRC = (Path(__file__).with_name("search_worker.py")).read_text()  # passed with -c: the sandbox can't read smb/
 
@@ -108,7 +109,7 @@ class Workspace:
 
     @staticmethod
     def _oserror(exc: OSError, path: str) -> ToolError:
-        if exc.errno in (errno.ELOOP, errno.EMLINK) or (exc.errno == errno.ENOTDIR and os.path.islink(exc.filename or "")):
+        if exc.errno in (errno.ELOOP, errno.EMLINK):
             return ToolError(f"symlinks are not supported: {path}")
         if isinstance(exc, FileNotFoundError):
             return ToolError(f"no such file or directory: {path}")
@@ -187,6 +188,8 @@ class Workspace:
             return out
 
         def walk(fd: int, prefix: list[str]) -> None:
+            if len(prefix) - len(parts) >= MAX_DEPTH:  # deeper trees are skipped (agent code can build them)
+                return
             try:
                 entries = sorted(os.scandir(fd), key=lambda e: e.name)
             except OSError:
@@ -256,11 +259,12 @@ class Workspace:
             files = [("/".join(parts), self._read(path))]
         except OSError as exc:
             raise self._oserror(exc, path) from None
-        payload, total = [], 0
+        payload, total, skipped = [], 0, 0
         for rel, data in files:
             total += len(data)
             if total > MAX_SEARCH_BYTES:
-                break
+                skipped += 1
+                continue
             payload.append([rel, data.decode("utf-8", errors="replace")])
         # the regex runs in a sandboxed child process with a deadline; it gets the contents, never paths to open
         cmd = ["/usr/bin/sandbox-exec", "-p", sandbox.profile(self.root), sys.executable, "-I", "-c", _WORKER_SRC]
@@ -272,9 +276,10 @@ class Workspace:
         if r.returncode != 0:
             raise ToolError("search failed: " + (r.stderr.strip().splitlines() or ["unknown error"])[-1][:200])
         hits = json.loads(r.stdout)
+        note = f"\n[{skipped} files not searched: size limit]" if skipped else ""
         if len(hits) > 60:
-            return "\n".join(hits[:60]) + "\n[more matches not shown]"
-        return "\n".join(hits) or "no matches"
+            return "\n".join(hits[:60]) + "\n[more matches not shown]" + note
+        return ("\n".join(hits) or "no matches") + note
 
     def write_file(self, path: str, content: str) -> str:
         self._write(path, content.encode("utf-8"))
@@ -299,7 +304,7 @@ class Workspace:
                     raise ToolError(f"symlinks are not supported: {path}")
             except OSError as exc:
                 raise self._oserror(exc, path) from None
-            target = ["/".join(parts)]
+            target = ["/".join(parts)] if parts else []  # "." means the whole suite, as with no path
         self.test_runs += 1
         env = sandbox.base_env(self.root / ".home", DEV_TZ)
         if self.lang == "py":

@@ -149,6 +149,7 @@ def load_frozen(corpus_dir: Path) -> tuple[dict, dict[str, bytes]]:
 
 def verify(corpus_dir: Path) -> dict:
     m = json.loads((corpus_dir / "CORPUS_MANIFEST.json").read_text())
-    if _hash_files(corpus_dir, m["sessions"]) != m["files"]:
+    want = hashlib.sha256(json.dumps({"files": m["files"], "allowed_leaks": m["allowed_leaks"]}, sort_keys=True).encode()).hexdigest()
+    if want != m["sha256"] or _hash_files(corpus_dir, m["sessions"]) != m["files"]:
         raise SystemExit(f"corpus {corpus_dir} differs from its CORPUS_MANIFEST.json: refusing to run")
     return m

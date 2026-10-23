@@ -118,4 +118,5 @@ Paid stages read the API key from a gitignored `.env`.
 - one fictional organisation and one draw of history sessions;
 - small families (14 memory-only, 8 stale or superseded);
 - small synthetic repos;
+- a candidate that deliberately forges a test run could still pass; static flags and hand checks are the backstop;
 - the graded code shares a process with the hidden tests (editable paths are allowlisted, the JUnit set is checked exactly, and suspicious code is flagged for hand-checking).

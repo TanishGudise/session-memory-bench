@@ -12,7 +12,8 @@ def main() -> None:
     rx = re.compile(req["pattern"])
     hits = []
     for rel, text in req["files"]:
-        for i, line in enumerate(text.splitlines(), 1):
+        for i, line in enumerate(text.split("\n"), 1):  # numbered like read_file shows them
+            line = line.rstrip("\r")
             if rx.search(line):
                 hits.append(f"{rel}:{i}: {line.strip()[:200]}")
                 if len(hits) > 60:

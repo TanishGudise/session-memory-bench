@@ -115,3 +115,34 @@ def test_processes_that_leave_the_session_are_reaped(tmp_path):
     if alive:  # don't leave it behind if the reaper failed
         os.kill(pid, 9)
     assert not alive
+
+
+def test_signals_only_reach_the_same_sandbox(tmp_path):
+    import subprocess as sp
+    outside = sp.Popen(["/bin/sleep", "30"])
+    try:
+        code = (f"import os, subprocess\ntry:\n    os.kill({outside.pid}, 0); print('OUTSIDE ALLOWED')\n"
+                "except PermissionError:\n    print('OUTSIDE DENIED')\n"
+                "p = subprocess.Popen(['/bin/sleep', '5']); p.kill(); p.wait(); print('OWN OK')\n")
+        r = _run(tmp_path, code)
+        assert "OUTSIDE DENIED" in r.output and "OWN OK" in r.output, r.output
+    finally:
+        outside.kill()
+        outside.wait()
+
+
+def test_reaper_spares_unsandboxed_processes_in_the_run_dir(tmp_path):
+    import subprocess as sp
+    bystander = sp.Popen(["/bin/sleep", "30"], cwd=tmp_path / "w")  # e.g. an operator's shell in the workspace
+    try:
+        _run(tmp_path, "print('x')")
+        time.sleep(0.3)
+        assert bystander.poll() is None
+    finally:
+        bystander.kill()
+        bystander.wait()
+
+
+def test_long_output_keeps_the_tail(tmp_path):
+    r = _run(tmp_path, "print('x' * 300000); print('THE END')")
+    assert "[output truncated" in r.output and r.output.rstrip().endswith("THE END")

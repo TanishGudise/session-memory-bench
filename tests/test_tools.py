@@ -124,3 +124,13 @@ def test_swapping_dirs_and_files_for_links_never_leaks(ws, tmp_path):
         t.join(5)
         import shutil
         shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_deep_trees_are_capped(ws, tmp_path):
+    d = tmp_path
+    for i in range(80):
+        d = d / f"d{i}"
+    d.mkdir(parents=True)
+    (d / "deep.py").write_text("x")
+    files = ws.files()  # no RecursionError, the deep file is beyond the cap
+    assert "pkg/a.py" in files and not any(k.endswith("deep.py") for k in files)

@@ -4,6 +4,7 @@ group is killed by its exact pgid (the child is started in its own session)."""
 
 from __future__ import annotations
 
+import ctypes
 import os
 import signal
 import subprocess
@@ -25,6 +26,7 @@ def profile(write_root: Path, extra_reads: tuple[Path, ...] = ()) -> str:
     allow = " ".join(f'(subpath "{d}")' for d in (w, str((ROOT / ".venv").resolve()), *(str(Path(x).resolve()) for x in extra_reads)))
     return (
         "(version 1)\n(allow default)\n"
+        "(deny signal)\n(allow signal (target same-sandbox))\n"
         "(deny network-outbound)\n(deny network-inbound)\n(deny network-bind)\n"
         '(allow network-outbound (remote unix-socket))\n'
         f"(deny file-read-data {deny})\n"
@@ -77,31 +79,57 @@ def run(cmd: list[str], cwd: Path, write_root: Path, env: dict[str, str], timeou
             os.killpg(proc.pid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             pass
-        _reap_escaped(write_root)
+        _reap_escaped(write_root, time.monotonic() - t0)
         if pid_file is not None:
             pid_file.unlink(missing_ok=True)
     data = out_path.read_bytes()
     out_path.unlink(missing_ok=True)
-    text = data[:max_output].decode("utf-8", errors="replace")
-    if len(data) > max_output:
-        text += f"\n[output truncated: {len(data)} bytes]"
+    if len(data) > max_output:  # keep the head and the tail: runners print their summary last
+        half = max_output // 2
+        text = (data[:half].decode("utf-8", errors="replace") + f"\n[output truncated: {len(data)} bytes]\n"
+                + data[-half:].decode("utf-8", errors="replace"))
+    else:
+        text = data.decode("utf-8", errors="replace")
     return Result(code=124 if timed_out.is_set() else code, output=text, timed_out=timed_out.is_set(),
                   seconds=time.monotonic() - t0)
 
 
-def _reap_escaped(write_root: Path) -> None:
-    """Best effort: kill processes that left the run's process group (setsid) but still have their working
-    directory or an open file inside the run's directory (lsof). Host-side file tools don't rely on this: they
-    never follow links, and sandboxed processes can't read or write outside their own directory anyway."""
+_libc = ctypes.CDLL("/usr/lib/libSystem.dylib")
+_libc.sandbox_check.restype = ctypes.c_int
+_libc.sandbox_check.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+
+
+def _elapsed_seconds(etime: str) -> int:
+    days, _, rest = etime.strip().rpartition("-")
+    parts = [int(x) for x in rest.split(":")]
+    while len(parts) < 3:
+        parts.insert(0, 0)
+    return int(days or 0) * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def _reap_escaped(write_root: Path, run_seconds: float) -> None:
+    """Best effort: kill processes the run left behind outside its process group (setsid). A process is killed
+    only if it is sandboxed, started during this run, and still has its working directory or an open file in the
+    run's directory, so an operator's shell or editor there is never touched. Host-side file tools don't rely on
+    this: they never follow links, and sandboxed processes can't read or write outside their own directory."""
     try:
         out = subprocess.run(["/usr/sbin/lsof", "-t", "+D", str(write_root)], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.TimeoutExpired):
         return
     me = os.getpid()
-    for tok in out.split():
+    pids = [int(t) for t in out.split() if t.isdigit() and int(t) != me]
+    if not pids:
+        return
+    try:
+        ps = subprocess.run(["/bin/ps", "-o", "pid=,etime=", "-p", ",".join(map(str, pids))],
+                            capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    for line in ps.splitlines():
         try:
-            pid = int(tok)
-            if pid != me:
+            pid_s, etime = line.split()
+            pid = int(pid_s)
+            if _elapsed_seconds(etime) <= run_seconds + 2 and _libc.sandbox_check(pid, None, 0) == 1:
                 os.kill(pid, signal.SIGKILL)
         except (ValueError, ProcessLookupError, PermissionError):
             continue

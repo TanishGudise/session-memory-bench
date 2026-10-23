@@ -52,7 +52,11 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
             stop = ep.user_turn(first)
         except Exception as exc:  # noqa: BLE001 - recorded, the run continues
             stop = f"error: {type(exc).__name__}: {exc}"[:300]
-        grade = grade_workspace(task, ws.files(), label=cond) if stop in FINAL_STOPS else None
+        try:
+            files = ws.files()
+        except Exception as exc:  # noqa: BLE001 - a workspace the harness can't snapshot is a harness error
+            stop, files = f"error: snapshot {type(exc).__name__}: {exc}"[:300], None
+        grade = grade_workspace(task, files, label=cond) if stop in FINAL_STOPS and files is not None else None
         searched = provider.calls if pull else []
         seen = set(recall.lessons) | {l for r in searched for l in r.lessons}
         seen_patterns = set(recall.pattern_lessons) | {l for r in searched for l in r.pattern_lessons}
