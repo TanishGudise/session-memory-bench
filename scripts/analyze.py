@@ -14,6 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from smb.grade import SUSPICIOUS, TRIPWIRE  # noqa: E402
+from smb.history import attempt_lines  # noqa: E402
 from smb.memory.corpus import lessons  # noqa: E402
 from smb.memory.provider import CONDITIONS  # noqa: E402
 from smb.stats import cluster_bootstrap_diff, holm, mcnemar_exact, wilson  # noqa: E402
@@ -108,8 +109,7 @@ def main() -> int:
                 chunk_source[c["id"]] = c["source"]
     res = {"episodes": len(rows), "excluded": [r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)]}
     if a.corpus:  # history attempts that were discarded and re-drawn (PREREGISTRATION: reported with their causes)
-        att = {f.parent.name: [{"attempt": r.get("attempt"), "problem": r.get("problem")}
-                               for r in map(json.loads, f.read_text().splitlines())]
+        att = {f.parent.name: [{"attempt": r.get("attempt"), "problem": r.get("problem")} for r in attempt_lines(f)]
                for f in sorted(Path(a.corpus).glob("*/attempts.jsonl"))}
         res["history_discarded_attempts"] = {"count": sum(map(len, att.values())), "sessions": att}
     rates = {}

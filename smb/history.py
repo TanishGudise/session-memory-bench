@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import shutil
 import uuid
 from dataclasses import dataclass
@@ -75,17 +76,38 @@ def _attempt_numbers(sess_dir: Path) -> list[int]:
     return [int(p.name.split(".")[0].split("-")[1]) for p in sess_dir.glob("attempt-*.transcript.jsonl")]
 
 
+def attempt_lines(f: Path) -> list[dict]:
+    """The lines of an attempts.jsonl; a line torn by a kill or a full disk is skipped (its attempt gets backfilled)."""
+    out = []
+    for line in f.read_text(errors="replace").splitlines() if f.exists() else []:
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rec, dict):
+            out.append(rec)
+    return out
+
+
 def _logged_attempts(sess_dir: Path) -> set[int]:
-    f = sess_dir / "attempts.jsonl"
-    return {json.loads(l).get("attempt") for l in f.read_text().splitlines() if l.strip()} if f.exists() else set()
+    return {r.get("attempt") for r in attempt_lines(sess_dir / "attempts.jsonl")}
 
 
 def _not_kept(sess_dir: Path, record: dict) -> None:
     """Record an attempt that stays out of the corpus; attempts.jsonl gets one line per discarded attempt."""
     sess_dir.mkdir(parents=True, exist_ok=True)
     (sess_dir / "session.partial.json").write_text(json.dumps(record, indent=2))
-    with open(sess_dir / "attempts.jsonl", "a") as fh:
-        fh.write(json.dumps(record) + "\n")
+    f = sess_dir / "attempts.jsonl"
+    torn = f.exists() and f.stat().st_size > 0 and not f.read_bytes().endswith(b"\n")
+    with open(f, "a") as fh:
+        fh.write(("\n" if torn else "") + json.dumps(record) + "\n")
+
+
+def _read_marker(marker: Path) -> int | None:
+    try:
+        return int(marker.read_text())
+    except (FileNotFoundError, ValueError):
+        return None
 
 
 def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None = None, limits: Limits | None = None) -> dict:
@@ -98,7 +120,7 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
     # Attempt bookkeeping: `attempt` holds the number of the latest attempt, written before it starts. An attempt that
     # isn't kept has a line in attempts.jsonl and, if it got that far, a transcript renamed attempt-<n> here.
     marker = sess_dir / "attempt"
-    prev = int(marker.read_text()) if marker.exists() else None
+    prev = _read_marker(marker)
     files = set(_attempt_numbers(sess_dir))
     earlier = sess_dir / "transcript.jsonl"
     if earlier.exists():  # the previous attempt wasn't kept: its transcript stays beside the new one
@@ -110,7 +132,8 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
         _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": n, "complete": False,
                              "problem": "ended without a record (killed, or its record could not be written)"})
     attempt = 1 + max(known | _logged_attempts(sess_dir), default=0)
-    marker.write_text(str(attempt))
+    (sess_dir / "attempt.new").write_text(str(attempt))
+    os.replace(sess_dir / "attempt.new", marker)  # atomic, so a kill never leaves a torn marker
     ws_dir = WORK / "h" / uuid.uuid4().hex[:12] / spec["repo"]
     try:  # everything after the mkdir sits inside the try, so the finally always removes the workspace
         write_tree(task.base_state(), ws_dir)
@@ -159,9 +182,10 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
             _not_kept(sess_dir, record)
         return record
     except BaseException as exc:  # an API error, a harness failure or Ctrl-C: record the attempt, then let it propagate
-        try:
-            _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": attempt, "complete": False,
-                                 "problem": f"error: {type(exc).__name__}: {exc}"[:300]})
+        try:  # unless this attempt already has its record (an interrupt can land just after it is written)
+            if attempt not in _logged_attempts(sess_dir) and not (sess_dir / "session.json").exists():
+                _not_kept(sess_dir, {"id": sid, "repo": spec["repo"], "attempt": attempt, "complete": False,
+                                     "problem": f"error: {type(exc).__name__}: {exc}"[:300]})
         except Exception:  # noqa: BLE001 - never mask the original error; the next run backfills this attempt
             pass
         raise

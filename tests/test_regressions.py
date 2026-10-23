@@ -312,3 +312,82 @@ def test_history_workspace_is_removed_when_setup_fails(tmp_path, monkeypatch):
     assert list((tmp_path / "work" / "h").iterdir()) == []
     line = json.loads((tmp_path / "hist" / "billing-H1" / "attempts.jsonl").read_text())
     assert line["attempt"] == 1 and line["problem"] == "error: OSError: disk full"
+
+
+def test_attempt_records_survive_kills_torn_writes_and_late_interrupts(tmp_path, monkeypatch):
+    from smb import history
+    from smb.memory.corpus import history_specs
+    from smb.stub import HistoryStub, StubClient
+    spec = history_specs()["billing-H1"]
+    killed = "ended without a record (killed, or its record could not be written)"
+
+    def stub():
+        return StubClient(HistoryStub({**spec, "id": "billing-H1"}))
+
+    def run(out, **kw):
+        return history.run_session("billing-H1", stub(), "stub", out, **kw)
+
+    def lines(out):
+        return [(r["attempt"], r["problem"]) for r in history.attempt_lines(out / "billing-H1" / "attempts.jsonl")]
+
+    def boom(exc):
+        def f(*a, **k):
+            raise exc
+        return f
+
+    # killed in setup, before the transcript exists: the marker alone gets attempt 1 its line
+    out = tmp_path / "a"
+    with monkeypatch.context() as m:
+        m.setattr(history, "_not_kept", lambda *a, **k: None)
+        m.setattr(history, "TranscriptWriter", boom(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt):
+            run(out)
+    assert run(out)["attempt"] == 2 and lines(out) == [(1, killed)]
+    with pytest.raises(ValueError):  # a kept session is never run again
+        run(out)
+
+    # killed between the rename and the backfill: the next run still backfills it
+    out = tmp_path / "b"
+    with monkeypatch.context() as m:
+        m.setattr(history, "_not_kept", lambda *a, **k: None)
+        m.setattr(history, "grade_workspace", boom(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt):
+            run(out)
+    with monkeypatch.context() as m:
+        m.setattr(history, "_logged_attempts", boom(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt):
+            run(out)
+    assert run(out)["attempt"] == 2 and lines(out) == [(1, killed)]
+    assert (out / "billing-H1" / "attempt-1.transcript.jsonl").exists()
+
+    # a record that can't be written never masks the interrupt
+    out = tmp_path / "c"
+    with monkeypatch.context() as m:
+        m.setattr(history, "_not_kept", boom(OSError("disk full")))
+        m.setattr(history, "grade_workspace", boom(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt):
+            run(out)
+    assert run(out)["attempt"] == 2 and lines(out) == [(1, killed)]
+
+    # a torn marker and a torn line: the run goes on, and the torn attempt is backfilled
+    out = tmp_path / "d"
+    d = out / "billing-H1"
+    d.mkdir(parents=True)
+    (d / "attempt").write_text("")
+    (d / "attempt-1.transcript.jsonl").write_text("A1")
+    (d / "attempts.jsonl").write_text('{"attempt": 1, "probl')
+    assert run(out)["attempt"] == 2 and lines(out) == [(1, killed)]
+
+    # an interrupt just after the record is written doesn't record the attempt twice
+    out = tmp_path / "e"
+    real_not_kept, real_grade = history._not_kept, history.grade_workspace
+
+    def then_interrupt(*a, **k):
+        real_not_kept(*a, **k)
+        raise KeyboardInterrupt()
+    with monkeypatch.context() as m:
+        m.setattr(history, "grade_workspace", lambda *a, **k: {**real_grade(*a, **k), "status": "timeout"})
+        m.setattr(history, "_not_kept", then_interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            run(out)
+    assert lines(out) == [(1, "checks not graded: timeout")]
