@@ -10,6 +10,7 @@ import re
 import stat
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -58,6 +59,7 @@ def _clip(text: str, limit: int = MAX_RESULT) -> str:
 
 MAX_FILE = 1_000_000          # bytes: bigger files are skipped by the walk and refused by read/search
 MAX_SEARCH_BYTES = 20_000_000
+MAX_SNAPSHOT_BYTES = 20_000_000
 MAX_DEPTH = 64
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _WORKER_SRC = (Path(__file__).with_name("search_worker.py")).read_text()  # passed with -c: the sandbox can't read smb/
@@ -72,6 +74,7 @@ class Workspace:
     root: Path
     lang: str  # "py" | "ts"
     pid_dir: Path | None = None
+    born: float = field(default_factory=time.time)  # when the workspace was created (bounds the process reaper)
     test_runs: int = 0
     edits: list[str] = field(default_factory=list)
 
@@ -95,6 +98,10 @@ class Workspace:
             for part in parts:
                 try:
                     nfd = os.open(part, _DIR_FLAGS, dir_fd=fd)
+                except NotADirectoryError:
+                    if stat.S_ISLNK(os.lstat(part, dir_fd=fd).st_mode):  # macOS: O_NOFOLLOW on a dir link -> ENOTDIR
+                        raise OSError(errno.ELOOP, "symlink", part) from None
+                    raise
                 except FileNotFoundError:
                     if not create:
                         raise
@@ -177,9 +184,13 @@ class Workspace:
             os.close(dfd)
         self.edits.append("/".join(parts))
 
-    def _scan(self, parts: list[str], read: bool) -> list[tuple[str, bool, bytes | None]]:
-        """(relative path, is_dir, content) under parts; links never followed, unreadable or huge entries skipped."""
+    def _scan(self, parts: list[str], read: bool, keep=None, budget: int = MAX_SEARCH_BYTES) -> list[tuple[str, bool, bytes | None]]:
+        """(relative path, is_dir, content) under parts; links never followed, unreadable or huge entries skipped.
+        With read=True, only files `keep(rel)` accepts are read, and reading stops once `budget` bytes would be
+        exceeded (sizes are checked with fstat before reading); self.skipped counts what that left out."""
         out: list[tuple[str, bool, bytes | None]] = []
+        self.skipped = 0
+        used = [0]
         if set(parts) & SKIP:
             return out
         try:
@@ -214,10 +225,20 @@ class Workspace:
                     elif e.is_file(follow_symlinks=False):
                         data = None
                         if read:
+                            if keep is not None and not keep(rel):
+                                continue
+                            try:
+                                size = e.stat(follow_symlinks=False).st_size
+                            except OSError:
+                                continue
+                            if used[0] + size > budget:
+                                self.skipped += 1
+                                continue
                             try:
                                 data = self._read_at(fd, e.name, rel)
                             except ToolError:
                                 continue
+                            used[0] += len(data)
                         out.append((rel, False, data))
                 except OSError:
                     continue
@@ -228,8 +249,10 @@ class Workspace:
             os.close(top)
         return out
 
-    def files(self) -> dict[str, bytes]:
-        return {rel: data for rel, is_dir, data in self._scan([], read=True) if not is_dir and data is not None}
+    def files(self, keep=None) -> dict[str, bytes]:
+        """Snapshot: regular files (only those `keep` accepts), at most MAX_SNAPSHOT_BYTES in total."""
+        return {rel: data for rel, is_dir, data in self._scan([], read=True, keep=keep, budget=MAX_SNAPSHOT_BYTES)
+                if not is_dir and data is not None}
 
     # tools -------------------------------------------------------------------
     def list_dir(self, path: str = ".") -> str:
@@ -255,17 +278,13 @@ class Workspace:
         try:
             os.close(self._open_dir(parts))
             files = [(rel, data) for rel, is_dir, data in self._scan(parts, read=True) if not is_dir and data is not None]
+            pre_skipped = self.skipped
         except NotADirectoryError:
+            pre_skipped = 0
             files = [("/".join(parts), self._read(path))]
         except OSError as exc:
             raise self._oserror(exc, path) from None
-        payload, total, skipped = [], 0, 0
-        for rel, data in files:
-            total += len(data)
-            if total > MAX_SEARCH_BYTES:
-                skipped += 1
-                continue
-            payload.append([rel, data.decode("utf-8", errors="replace")])
+        payload, skipped = [[rel, data.decode("utf-8", errors="replace")] for rel, data in files], pre_skipped
         # the regex runs in a sandboxed child process with a deadline; it gets the contents, never paths to open
         cmd = ["/usr/bin/sandbox-exec", "-p", sandbox.profile(self.root), sys.executable, "-I", "-c", _WORKER_SRC]
         try:
@@ -311,7 +330,8 @@ class Workspace:
             cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *target]
         else:
             cmd = ["node", "--test", *target]
-        res = sandbox.run(cmd, cwd=self.root, write_root=self.root, env=env, timeout=120, pid_dir=self.pid_dir)
+        res = sandbox.run(cmd, cwd=self.root, write_root=self.root, env=env, timeout=120, pid_dir=self.pid_dir,
+                          born=self.born)
         tail = res.output[-6000:] if len(res.output) > 6000 else res.output
         note = "[timed out after 120 s]\n" if res.timed_out else ""
         return f"{note}exit code {res.code}\n{tail}"

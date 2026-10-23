@@ -85,7 +85,7 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
                  ws=ws, meter=meter, transcript=tw, limits=limits or Limits())
     try:
         stop_task = ep.user_turn(spec["ticket"].strip())
-        checks = grade_workspace(task, ws.files(), label="hist") if task.has_checks() else None
+        checks = grade_workspace(task, ws.files(keep=task.is_editable), label="hist") if task.has_checks() else None
         failed = {n for n, v in (checks or {}).get("tests", {}).items() if v != "pass"}
         text, posted = review_message(spec, failed)
         ep.limits = REVISION_LIMITS

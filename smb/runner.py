@@ -53,7 +53,7 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
         except Exception as exc:  # noqa: BLE001 - recorded, the run continues
             stop = f"error: {type(exc).__name__}: {exc}"[:300]
         try:
-            files = ws.files()
+            files = ws.files(keep=task.is_editable)
         except Exception as exc:  # noqa: BLE001 - a workspace the harness can't snapshot is a harness error
             stop, files = f"error: snapshot {type(exc).__name__}: {exc}"[:300], None
         grade = grade_workspace(task, files, label=cond) if stop in FINAL_STOPS and files is not None else None

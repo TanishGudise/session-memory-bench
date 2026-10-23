@@ -46,12 +46,12 @@ class Result:
 
 
 def run(cmd: list[str], cwd: Path, write_root: Path, env: dict[str, str], timeout: float,
-        pid_dir: Path | None = None, max_output: int = 200_000) -> Result:
+        pid_dir: Path | None = None, max_output: int = 200_000, born: float | None = None) -> Result:
     """Run `cmd` sandboxed. Output goes to a file inside write_root (no pipes a daemon could hold)."""
     write_root.mkdir(parents=True, exist_ok=True)
     out_path = write_root / f".out-{os.getpid()}-{time.monotonic_ns()}"
     full = ["/usr/bin/sandbox-exec", "-p", profile(write_root), *cmd]
-    t0 = time.monotonic()
+    t0, wall0 = time.monotonic(), time.time()
     with open(out_path, "wb") as out:
         proc = subprocess.Popen(full, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
                                 start_new_session=True)
@@ -79,7 +79,7 @@ def run(cmd: list[str], cwd: Path, write_root: Path, env: dict[str, str], timeou
             os.killpg(proc.pid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             pass
-        _reap_escaped(write_root, time.monotonic() - t0)
+        _reap_escaped(write_root, time.time() - (born if born is not None else wall0) + 1)
         if pid_file is not None:
             pid_file.unlink(missing_ok=True)
     data = out_path.read_bytes()
@@ -107,11 +107,13 @@ def _elapsed_seconds(etime: str) -> int:
     return int(days or 0) * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
 
 
-def _reap_escaped(write_root: Path, run_seconds: float) -> None:
-    """Best effort: kill processes the run left behind outside its process group (setsid). A process is killed
-    only if it is sandboxed, started during this run, and still has its working directory or an open file in the
-    run's directory, so an operator's shell or editor there is never touched. Host-side file tools don't rely on
-    this: they never follow links, and sandboxed processes can't read or write outside their own directory."""
+def _reap_escaped(write_root: Path, age_limit: float) -> None:
+    """Best effort: kill processes that runs in this directory left behind outside their process group (setsid).
+    A process is killed only if it is sandboxed, started after the directory was created (age_limit), and still
+    has its working directory or an open file in the directory. An unsandboxed process there (an operator's shell
+    or editor) is never touched; another sandboxed process that started in the same window and entered the
+    directory could be. Host-side file tools don't rely on this: they never follow links, and sandboxed processes
+    can't read or write outside their own directory."""
     try:
         out = subprocess.run(["/usr/sbin/lsof", "-t", "+D", str(write_root)], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.TimeoutExpired):
@@ -129,7 +131,7 @@ def _reap_escaped(write_root: Path, run_seconds: float) -> None:
         try:
             pid_s, etime = line.split()
             pid = int(pid_s)
-            if _elapsed_seconds(etime) <= run_seconds + 2 and _libc.sandbox_check(pid, None, 0) == 1:
+            if _elapsed_seconds(etime) <= age_limit and _libc.sandbox_check(pid, None, 0) == 1:
                 os.kill(pid, signal.SIGKILL)
         except (ValueError, ProcessLookupError, PermissionError):
             continue

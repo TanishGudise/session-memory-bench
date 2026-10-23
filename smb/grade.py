@@ -14,6 +14,7 @@ import ast
 import re
 import shutil
 import sys
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -101,15 +102,22 @@ def _summary_agrees(lang: str, output: str, tests: dict[str, str]) -> bool:
     failed = sum(1 for v in tests.values() if v == "fail")
     if "INTERNALERROR" in output or re.search(r"(Error|Exception|denied)[^\n]*junit|junit[^\n]*(Error|denied)", output):
         return False
+    lines = [l for l in output.strip().splitlines() if l.strip()]
     if lang == "py":
-        tail = [l for l in output.strip().splitlines() if " in " in l and ("passed" in l or "failed" in l)]
-        if not tail:
+        summary = [l for l in lines if re.search(r"\d+ (passed|failed)", l) and " in " in l]
+        # exactly one summary-shaped line, and it is the last line: a summary printed later (at exit) can't win
+        if len(summary) != 1 or not lines or lines[-1] != summary[0]:
             return False
-        nums = dict((k, int(v)) for v, k in re.findall(r"(\d+) (passed|failed|error|errors)", tail[-1]))
+        nums = dict((k, int(v)) for v, k in re.findall(r"(\d+) (passed|failed|error|errors)", summary[0]))
         return nums.get("passed", 0) == passed and nums.get("failed", 0) == failed and not nums.get("error") and not nums.get("errors")
-    p = re.findall(r"^# pass (\d+)$", output, re.M)
-    f = re.findall(r"^# fail (\d+)$", output, re.M)
-    return bool(p and f) and int(p[-1]) == passed and int(f[-1]) == failed
+    # node's TAP summary is a fixed block that ends the output; earlier "# ..." lines (e.g. a child's echoed
+    # console.log) don't count
+    keys = ["tests", "suites", "pass", "fail", "cancelled", "skipped", "todo", "duration_ms"]
+    block = lines[-len(keys):]
+    if len(block) != len(keys) or any(not re.fullmatch(rf"# {k} [\d.]+", l.strip()) for k, l in zip(keys, block)):
+        return False
+    counts = {k: l.split()[2] for k, l in zip(keys, block)}
+    return int(counts["pass"]) == passed and int(counts["fail"]) == failed
 
 
 def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
@@ -134,18 +142,24 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
             files = sorted(p.relative_to(src).as_posix() for p in hidden_root.rglob("*.test.ts"))
             cmd = ["node", "--test", "--test-reporter=junit", f"--test-reporter-destination={junit}",
                    "--test-reporter=tap", "--test-reporter-destination=stdout", *files]
-        res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=TIMEOUT, pid_dir=WORK / "pids")
+        born = time.time()
+        res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=TIMEOUT, pid_dir=WORK / "pids", born=born)
         if res.timed_out:  # a loaded machine can slow a correct run; retry once with twice the time
             junit.unlink(missing_ok=True)
-            res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=2 * TIMEOUT, pid_dir=WORK / "pids")
+            res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=2 * TIMEOUT, pid_dir=WORK / "pids", born=born)
         canaries = CANARY_NAMES[task.lang]
         expected = expected_tests(task) | canaries
         result = {"task": task.id, "label": label, "timed_out": res.timed_out, "exit": res.code,
                   "seconds": round(res.seconds, 2), "score": 0}
-        tests = parse_junit(junit) if junit.exists() else {}
+        try:
+            tests = parse_junit(junit) if junit.exists() else {}
+        except ET.ParseError:  # a report something corrupted: never graded
+            tests, junit_bad = {}, True
+        else:
+            junit_bad = False
         if res.timed_out:
             status = "timeout"
-        elif not junit.exists():
+        elif not junit.exists() or junit_bad:
             status = "no_junit"
         elif set(tests) == expected and "dup" not in tests.values():
             if any(tests[c] != "fail" for c in canaries):
@@ -176,14 +190,22 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
         shutil.rmtree(gdir, ignore_errors=True)
 
 
+# Broad tripwire on top of SUSPICIOUS: candidate source (not its tests) that mentions test machinery, process
+# exit hooks, directory listing or the parent directory gets a hand check, whatever it does.
+TRIPWIRE = re.compile(r"(?<![.\w])test|junit|argv|summary|weakref|finalize|__del__|threading|dup2|listdir|scandir|glob"
+                      r"|[\"']\.\.[\"'/]|\.\./", re.I)
+
+
 def suspicious(task: Task, workspace: dict[str, bytes]) -> list[str]:
+    """Added lines (not in main's version of the file) of candidate source files that match SUSPICIOUS or TRIPWIRE."""
     base = task.base_state()
     out = []
     for rel, data in workspace.items():
         if not task.is_editable(rel) or rel.startswith(("tests/", "test/")) or base.get(rel) == data:
             continue
+        old = set(base.get(rel, b"").decode(errors="replace").splitlines())
         for i, line in enumerate(data.decode(errors="replace").splitlines(), 1):
-            if SUSPICIOUS.search(line):
+            if line not in old and (SUSPICIOUS.search(line) or TRIPWIRE.search(line)):
                 out.append(f"{rel}:{i}: {line.strip()[:120]}")
     return out
 

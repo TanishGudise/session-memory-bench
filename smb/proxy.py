@@ -1,5 +1,5 @@
-"""Loopback CONNECT proxy with a host allowlist. Paid runs send all model traffic through it while the run
-itself sits under sandbox-exec with non-loopback network denied, so nothing but the allowlisted host is reachable.
+"""Loopback CONNECT proxy with a host allowlist. Paid runs send all model traffic through it, and the run process
+installs smb.netguard (loopback connections only), so nothing but the allowlisted host is reachable from it.
 
   python -m smb.proxy --port 0 --allow api.anthropic.com:443 --log runs/<run>/proxy.log
 """
