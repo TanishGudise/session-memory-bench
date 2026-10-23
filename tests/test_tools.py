@@ -35,3 +35,28 @@ def test_replace_needs_exactly_one_match(ws):
 def test_search_and_list(ws):
     assert ws.search_code(r"x = \d") == "pkg/a.py:1: x = 1\npkg/a.py:2: x = 1"
     assert "pkg/a.py" in ws.list_dir(".")
+
+
+def test_symlinks_made_by_agent_code_are_not_followed(ws, tmp_path):
+    secret = tmp_path.parent / "secret-outside.txt"
+    secret.write_text("def test_lesson_secret(): pass\n")
+    os.symlink(secret, tmp_path / "pkg" / "link.py")
+    assert "secret" not in ws.search_code("test_lesson")
+    assert "link.py" not in ws.list_dir(".")
+    assert "pkg/link.py" not in ws.files()
+
+
+def test_odd_inputs_are_tool_errors(ws, tmp_path):
+    os.mkfifo(tmp_path / "pkg" / "pipe.py")
+    for name, args in [("run_tests", {"path": "a\x00b"}), ("run_tests", {"path": "x" * 5000}),
+                       ("search_code", {"pattern": "a{99999999999}"}), ("replace_in_file", {"path": "pkg/pipe.py", "old_text": "a", "new_text": "b"}),
+                       ("write_file", {"path": "pkg/pipe.py", "content": "x"}), ("read_file", {"path": "pkg/pipe.py"}),
+                       ("read_file", {"path": 3}), ("nope", {})]:
+        with pytest.raises(ToolError):
+            ws.call(name, args)
+    (tmp_path / "pkg" / "locked.py").write_text("x")
+    os.chmod(tmp_path / "pkg" / "locked.py", 0)
+    try:
+        assert "pkg/locked.py" not in ws.files()
+    finally:
+        os.chmod(tmp_path / "pkg" / "locked.py", 0o644)

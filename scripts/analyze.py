@@ -164,6 +164,12 @@ def main() -> int:
     mc, mg = rates["c/M"]["rate"], rates["g/M"]["rate"]
     res["saturated"] = bool(mc is not None and mg is not None and mc >= 0.9 and mg >= 0.9)
     res["flagged_suspicious"] = [r["episode"] for r in rows if r.get("suspicious")]
+    # G4: every one of these is hand-checked before the results are reported
+    res["hand_check"] = {
+        "tampered": [r["episode"] for r in rows if r.get("grade_status") == "tampered"],
+        "grader_timeouts": [r["episode"] for r in rows if r.get("grade_status") == "timeout"],
+        "a_passes_on_M": [r["episode"] for r in scored(rows) if r["condition"] == "a" and r["family"] == "M" and r["score"] == 1],
+    }
     (run / "analysis.json").write_text(json.dumps(res, indent=2, default=str))
     lines = ["| cond | " + " | ".join(FAMS) + " | all |", "|---" * (len(FAMS) + 2) + "|"]
     for c in CONDITIONS:

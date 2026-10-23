@@ -18,6 +18,7 @@ def _norm(t: str) -> str:
 
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
+LITERAL = re.compile(r'"([^"\\\n]*)"|\'([^\'\\\n]*)\'')
 TS_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')  # one double-quoted literal at a time, escapes included
 
 
@@ -38,8 +39,10 @@ def answer_strings() -> dict[str, set[str]]:
                 continue
             for line in data.decode(errors="replace").splitlines():
                 s = line.strip()
+                lits = [a or b for a, b in LITERAL.findall(s)]
+                new_literal = any(len(x) >= 3 and _norm(x) not in main_blob for x in lits)
                 if (len(s) >= MIN_LINE and s not in main_lines and not s.startswith(("import ", "from ", "#", "//"))
-                        and set(IDENT.findall(s)) - main_idents):  # task-specific, not generic code
+                        and (set(IDENT.findall(s)) - main_idents or new_literal)):  # task-specific, not generic code
                     added.add(s)
         literals = set()
         for rel, data in t.hidden_files().items():

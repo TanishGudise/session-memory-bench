@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -51,26 +52,15 @@ def freeze(corpus_dir: Path, count_tokens: Callable[[str], int], allowed_leaks: 
            repos: list[str] | None = None, force: bool = False) -> dict:
     """Freeze the corpus of `repos` (all four by default; the pilot freezes billing alone).
 
-    An existing freeze may only be extended to more repos, with every file it hashed unchanged (the old manifest
-    is kept as CORPUS_MANIFEST.<sha8>.json); anything else needs force=True and a dated amendment."""
+    Every check runs before anything is replaced; the new files are written under temporary names and swapped in
+    only when all checks pass, so a failed freeze leaves the previous freeze intact. An existing freeze may only be
+    extended to more repos with its sessions, notes and note labels unchanged (the old manifest and its notes
+    snapshot are kept); anything else needs force=True and a dated amendment."""
     repos = sorted(repos or ALL_REPOS)
-    old_path = corpus_dir / "CORPUS_MANIFEST.json"
-    if old_path.exists():
-        old = json.loads(old_path.read_text())
-        sessions_unchanged = all(
-            (corpus_dir / rel).exists() and hashlib.sha256((corpus_dir / rel).read_bytes()).hexdigest() == h
-            for rel, h in old["files"].items() if "/" in rel)
-        extends = set(old["repos"]) < set(repos) and sessions_unchanged
-        if not (extends or force):
-            raise SystemExit("corpus already frozen; a re-freeze must add repos and leave the frozen sessions unchanged "
-                             "(or pass --force and record an amendment)")
-        old_path.rename(corpus_dir / f"CORPUS_MANIFEST.{old['sha256'][:8]}.json")
     specs = {sid: s for sid, s in corpus_mod.history_specs().items() if s["repo"] in repos}
     missing = [sid for sid in specs if not (corpus_dir / sid / "session.json").exists()]
     if missing:
         raise SystemExit(f"history sessions not complete: {missing}")
-    chunks = corpus_mod.build(corpus_dir, repos)
-    corpus_mod.save(chunks, corpus_dir / "chunks.jsonl")
     notes = [json.loads(l) for l in (corpus_dir / "notes.jsonl").read_text().splitlines() if l.strip()]
     if {n["source"] for n in notes} - set(specs) or set(specs) - {n["source"] for n in notes} - _noteless(corpus_dir):
         raise SystemExit("notes.jsonl must hold the notes of exactly the frozen sessions (re-run distill for these repos)")
@@ -80,22 +70,62 @@ def freeze(corpus_dir: Path, count_tokens: Callable[[str], int], allowed_leaks: 
     unknown = {l for ls in labels["labels"].values() for l in ls} - set(corpus_mod.lessons())
     if unknown:
         raise SystemExit(f"unknown lessons in notes_labels.json: {sorted(unknown)}")
+    old_path = corpus_dir / "CORPUS_MANIFEST.json"
+    old = json.loads(old_path.read_text()) if old_path.exists() else None
+    if old is not None and not force:
+        problems = []
+        if not set(old["repos"]) < set(repos):
+            problems.append("a re-freeze must add repos")
+        for rel, h in old["files"].items():
+            if "/" in rel and (not (corpus_dir / rel).exists() or hashlib.sha256((corpus_dir / rel).read_bytes()).hexdigest() != h):
+                problems.append(f"frozen session file changed: {rel}")
+        snap = corpus_dir / old["notes_snapshot"]
+        old_notes = {n["id"]: n for n in (json.loads(l) for l in snap.read_text().splitlines() if l.strip())}
+        new_notes = {n["id"]: n for n in notes}
+        old_labels = json.loads((corpus_dir / old["labels_snapshot"]).read_text())["labels"]
+        for nid, n in old_notes.items():
+            if new_notes.get(nid) != n:
+                problems.append(f"frozen note changed or removed: {nid}")
+            elif sorted(labels["labels"][nid]) != sorted(old_labels[nid]):
+                problems.append(f"frozen note label changed: {nid}")
+        if problems:
+            raise SystemExit("corpus already frozen; refusing this re-freeze (pass --force and record an amendment): "
+                             + "; ".join(problems[:5]))
+    chunks = corpus_mod.build(corpus_dir, repos)
     raw = build_raw_blocks(corpus_dir, count_tokens, repos=repos)
-    (corpus_dir / "raw_blocks.json").write_text(json.dumps(raw, indent=1, ensure_ascii=False))
-    texts = [c.text for c in chunks] + [n["text"] for n in notes] + [b["block"] for b in raw.values()]
     allowed_leaks = set(allowed_leaks or ())
+    texts = [c.text for c in chunks] + [n["text"] for n in notes] + [b["block"] for b in raw.values()]
     leaks = {tid: [s for s in strs if s not in allowed_leaks] for tid, strs in find_leaks(texts).items()}
     leaks = {k: v for k, v in leaks.items() if v}
     if leaks:
         (corpus_dir / "leaks.json").write_text(json.dumps(leaks, indent=1))
         raise SystemExit(f"answer strings found in the corpus (see leaks.json): {list(leaks)}")
-    files = _hash_files(corpus_dir, list(specs))
-    manifest = {"sha256": hashlib.sha256(json.dumps({"files": files, "allowed_leaks": sorted(allowed_leaks)},
-                                                    sort_keys=True).encode()).hexdigest(), "files": files,
-                "repos": repos, "sessions": sorted(specs), "allowed_leaks": sorted(allowed_leaks),
-                "chunks": len(chunks), "notes": len(notes),
+    # all checks passed: write the new files under temporary names, then swap them in
+    tmp_chunks, tmp_raw = corpus_dir / "chunks.jsonl.new", corpus_dir / "raw_blocks.json.new"
+    corpus_mod.save(chunks, tmp_chunks)
+    tmp_raw.write_text(json.dumps(raw, indent=1, ensure_ascii=False))
+    files = {}
+    for sid in sorted(specs):
+        for name in ("transcript.jsonl", "session.json"):
+            files[f"{sid}/{name}"] = hashlib.sha256((corpus_dir / sid / name).read_bytes()).hexdigest()
+    pending = {"chunks.jsonl": tmp_chunks, "notes.jsonl": corpus_dir / "notes.jsonl",
+               "notes_labels.json": corpus_dir / "notes_labels.json", "raw_blocks.json": tmp_raw}
+    for name in FROZEN_FILES:
+        files[name] = hashlib.sha256(pending[name].read_bytes()).hexdigest()
+    sha = hashlib.sha256(json.dumps({"files": files, "allowed_leaks": sorted(allowed_leaks)}, sort_keys=True).encode()).hexdigest()
+    notes_snap, labels_snap = f"frozen-{sha[:8]}-notes.jsonl", f"frozen-{sha[:8]}-labels.json"
+    (corpus_dir / notes_snap).write_bytes((corpus_dir / "notes.jsonl").read_bytes())
+    (corpus_dir / labels_snap).write_bytes((corpus_dir / "notes_labels.json").read_bytes())
+    manifest = {"sha256": sha, "files": files, "repos": repos, "sessions": sorted(specs), "allowed_leaks": sorted(allowed_leaks),
+                "notes_snapshot": notes_snap, "labels_snapshot": labels_snap, "chunks": len(chunks), "notes": len(notes),
                 "raw": {r: {k: b[k] for k in ("tokens", "sessions_included", "sessions_skipped")} for r, b in raw.items()}}
-    (corpus_dir / "CORPUS_MANIFEST.json").write_text(json.dumps(manifest, indent=1))
+    tmp_manifest = corpus_dir / "CORPUS_MANIFEST.json.new"
+    tmp_manifest.write_text(json.dumps(manifest, indent=1))
+    if old is not None:
+        old_path.rename(corpus_dir / f"CORPUS_MANIFEST.{old['sha256'][:8]}.json")
+    os.replace(tmp_chunks, corpus_dir / "chunks.jsonl")
+    os.replace(tmp_raw, corpus_dir / "raw_blocks.json")
+    os.replace(tmp_manifest, old_path)
     return manifest
 
 

@@ -60,7 +60,7 @@ Not run yet. The paid stages are pilot, history, main run and a Sonnet check, ca
 - every solution passes the visible test suite, so the visible tests don't give the lesson away;
 - every history session's start state and checks;
 - that no line of the eval-time code matches a memory-only lesson's evidence patterns;
-- that no oracle line or hidden-test string appears in the tickets, reviews and chat. The same check runs on the agents' own transcripts and notes when the corpus is frozen.
+- that no answer string (task-specific oracle lines and hidden-test literals, as defined in PREREGISTRATION.md) appears in the tickets, reviews and chat. The same check runs on the agents' own transcripts, notes and raw blocks when the corpus is frozen.
 
 `python scripts/stub_e2e.py` runs every stage end to end with stub models and no network. The stages are history, distillation, freeze, and all 32 tasks × 6 conditions.
 
@@ -85,7 +85,8 @@ Requirements:
 - Node 26 (no packages);
 - macOS `sandbox-exec`;
 - for the embedding half of retrieval, set two environment variables: `SMB_RETRIEVAL_PYTHON` (an interpreter with `numpy`, `onnxruntime` and `tokenizers`) and `SMB_EMBED_MODEL` (the `bge-small-en-v1.5` ONNX export);
-- workspaces live under `SMB_WORK` (default `~/.smb-work`).
+- workspaces live under `SMB_WORK` (default `~/.smb-work`);
+- the base Python and Node interpreters must live outside the home directory (e.g. python.org or Homebrew installs), because sandboxed code can't read under `$HOME`.
 
 ```
 python -m pytest                       # harness tests
@@ -103,7 +104,9 @@ python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 
 Paid stages read the API key from a gitignored `.env`.
 - All model traffic goes through a loopback proxy that allows only the API host, and the run process can open loopback connections only.
-- Agent code, graders and the embedder run sandboxed: no network, and no reads of file contents under the home directory (the benchmark, its git history, other workspaces) or the shared temp dirs, except their own directory and the Python environment.
+- Agent code, graders and the embedder run sandboxed. They get no network, and they can't read file contents under the home directory (the benchmark, its git history, other workspaces) or the shared temp dirs. The exceptions are their own directory, the project's Python environment and, for the embedder, its interpreter, model and server script.
+- The agent's file tools never follow symbolic links.
+- Every grading run includes tests that must fail, so a patched assertion or runner is caught.
 - Every request, including every retry, reserves its worst-case cost against its stage's cap before it is sent. A request that may have been billed without returning usage is booked at that worst case.
 
 ## Limits

@@ -17,7 +17,7 @@ Registered 2026-10-22, before any model call. Changes after the first model call
   - What lands on main is the reference step, not the agent's diff.
 - **Memory corpus.** The history transcripts (in the Claude Code session-JSONL shape), produced once by the same model and harness as the main run, plus the chat messages.
   - `scripts/paid.py freeze-corpus` writes the chunks and condition b's blocks, checks the distilled notes and their hand labels (written earlier by distillation and `scripts/label_notes.py`), runs the leakage check, and writes a hash of every file to `CORPUS_MANIFEST.json`.
-  - This happens before any evaluation episode. Eval refuses to run if a file no longer matches. A freeze can't be silently replaced: a re-freeze may only add repos with the frozen sessions unchanged, and anything else needs `--force` and an amendment. A run directory refuses to resume under a different corpus, model, stage or task manifest.
+  - This happens before any evaluation episode. Eval refuses to run if a file no longer matches. A freeze can't be silently replaced: every check runs before anything is swapped in, and a re-freeze may only add repos while the frozen sessions, notes and note labels stay unchanged. Anything else needs `--force` and an amendment. A run directory refuses to resume under a different corpus, model, stage or task manifest.
   - A history session that ends on a spend cap or an API error is not kept: it is run again.
   - The pilot freezes a billing-only corpus: billing's 7 sessions plus chat. The other 19 sessions are added to the same corpus directory afterwards; billing's sessions are not re-run. The full corpus of all four repos is frozen, and its hash recorded as an amendment, before the main run. The main and Sonnet stages refuse a partial corpus.
 - **Tasks.** 32 evaluation tasks (`tasks/`), phrased the way a teammate asks: the interface to build, no hint of the lesson.
@@ -34,8 +34,9 @@ Registered 2026-10-22, before any model call. Changes after the first model call
     - `diag`: a diagnostic, such as "followed the old rule". Never scored.
   - An episode passes when it ends with `finish` and every `func` and `lesson` test passes.
   - The candidate tree is main plus only the task's editable paths from the agent's workspace. It never includes `conftest.py`, `pytest.ini`, `sitecustomize.py`, `package.json` or similar.
-  - Hidden tests run in a separate sandboxed process with no network. That process can write only in its grading directory, and it cannot read file contents anywhere under the home directory (including the benchmark, its git history and other workspaces) or in the shared temp directories. The exceptions are its own directory and the project's Python environment.
+  - Hidden tests run in a separate sandboxed process with no network. That process can write only in its grading directory, and it cannot read file contents anywhere under the home directory (including the benchmark, its git history and other workspaces) or in the shared temp directories (`/private/tmp`, `/private/var/tmp`, `/private/var/folders`). The exceptions are its own directory and the project's Python environment.
   - The JUnit test set must equal the hidden file's test set exactly.
+  - Every run also includes tests that must fail: one per assertion helper (TypeScript), and a plain `assert` plus `pytest.raises` (Python). If any of them passes, something patched the assertions or the runner; the episode is marked tampered, scores 0, and is hand-checked.
   - Graders run with `TZ=America/Los_Angeles`. A grading run that times out is retried once with twice the time.
 
 ## 2. Conditions
@@ -56,7 +57,8 @@ Same model, system prompt, task prompt, tools and budgets in every condition; on
 - **Loop.** A minimal loop on the Messages API (`smb/agent.py`).
 - **Tools.** `list_dir`, `read_file`, `search_code`, `write_file`, `replace_in_file`, `run_tests` and `finish`, plus `search_memory` in f. No shell.
   - `run_tests` runs the visible suite or one path, sandboxed like the graders, with `TZ=America/Los_Angeles`.
-  - Tool errors, including exceptions from bad arguments, go back to the agent as error results.
+  - Agent mistakes (unknown tools, bad arguments, bad or non-regular paths, bad regular expressions, unreadable files) go back to the agent as error results. A failure of the harness itself, such as the retriever or the test sandbox failing to start, ends the episode as a harness error.
+  - The file tools run on the host, inside the workspace only, and never follow or list symbolic links.
 - **Per episode.**
   - At most 30 model calls, `max_tokens` 8,000, prompt caching on, and the model's default effort.
   - A 10-minute wall clock, checked between calls; each call times out after 180 seconds.
@@ -94,7 +96,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - **What counts as recalled.**
   - b: the lesson's span is inside the injected block.
   - c and f: a recalled chunk carries a span (section 5).
-  - d: a recalled note's frozen hand label.
+  - d: a recalled note's frozen hand label, or a recalled chat message's span label.
 - **S-s tasks.** *followed the old rule* (a `diag` test passed); *current rule recalled, not applied*; *other*.
 - **S-u tasks**, where memory never holds the current rule. *followed the old rule*; *old rule recalled, not followed, other failure*; *other*.
 
@@ -134,7 +136,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - Main and every history start state pass their visible suites under `TZ=UTC`.
 - History checks behave as listed in `scripts/validate.py`.
 - Memory-only lessons have no evidence-pattern match in main.
-- No oracle line and no hidden-test string literal of 12+ characters appears in any memory text we wrote.
+- No answer string (defined under Leakage below) appears in any memory text we wrote.
 - The stub end-to-end run is clean: the no-memory stub scores 0 on M and D, and the oracle stub passes every task.
 
 **G2 (pilot)**
@@ -154,7 +156,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
   - main: $12;
   - Sonnet: $3;
   - total: $17.50 of a $20 budget.
-- Each stage's meter starts from what that stage has already booked in the spend ledgers. Stages run one process at a time, so a resumed stage stays within its cap.
+- Each stage's meter starts from what that stage has already booked in the spend ledgers. A lock file allows one process per stage, so a resumed stage stays within its cap.
 - A command runs only in its own stages (history and distillation: pilot for billing, history for the rest; eval: pilot, main or Sonnet).
 - Distillation goes through the same reservation and retry rules, and saves its notes after every session.
 - A stage stops at its cap. Episodes stopped by the cap are reported, not scored.
@@ -170,9 +172,10 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 
 **Leakage**
 - Answer strings are:
-  - oracle lines of 25+ characters that use an identifier main doesn't have (imports and comments skipped);
+  - oracle lines of 25+ characters that use an identifier or a string literal main doesn't have (imports and comments skipped);
   - hidden-test string literals of 12+ characters;
   - in both cases, only strings not already present anywhere in main.
+- Oracle lines made only of names and literals that main already has are left out on purpose. A history agent that writes the same line is producing memory of a lesson, not copying an answer.
 - At freeze, no answer string may appear in any chunk, note or raw block.
 - A string that is a false positive is allowed only through a reviewed list recorded as an amendment; the list is part of the corpus hash.
 

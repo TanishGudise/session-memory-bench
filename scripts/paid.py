@@ -22,6 +22,7 @@ embedder run under sandbox-exec with no network. The proxy is stopped by its exa
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import signal
@@ -238,8 +239,17 @@ def main() -> int:
     allowed = {"history": ("pilot", "history"), "distill": ("pilot", "history"), "eval": ("pilot", "main", "sonnet")}
     if a.cmd in allowed and a.stage not in allowed[a.cmd]:
         raise SystemExit(f"{a.cmd} runs in stage {' or '.join(allowed[a.cmd])}, not {a.stage}")
-    if a.cmd in ("history", "distill") and (a.stage == "pilot") != (sorted(a.repos) == ["billing"]):
+    if a.cmd in ("history", "distill") and ((a.stage == "pilot" and sorted(a.repos) != ["billing"])
+                                            or (a.stage == "history" and "billing" in a.repos)):
         raise SystemExit("billing's history and distillation are the pilot stage; the other repos are the history stage")
+    lock = None
+    if a.cmd != "freeze-corpus":  # one process per stage, so a stage's meter sees everything that stage books
+        (RUNS / "locks").mkdir(parents=True, exist_ok=True)
+        lock = open(RUNS / "locks" / f"{a.stage}.lock", "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(f"another process is running stage {a.stage}")
     s = Session(a.stub, RUNS / "logs")
     try:
         {"history": cmd_history, "distill": cmd_distill, "freeze-corpus": cmd_freeze_corpus, "eval": cmd_eval}[a.cmd](a, s)

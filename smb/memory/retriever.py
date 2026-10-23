@@ -31,6 +31,11 @@ EMBED_MODEL = os.environ.get("SMB_EMBED_MODEL", "")
 CACHE = ROOT / ".cache" / "embeddings"
 
 
+def clean(text: str) -> str:
+    """Valid UTF-8 only (a lone surrogate in an agent's query can't be encoded for the embedding server)."""
+    return text.encode("utf-8", "replace").decode("utf-8")
+
+
 def tokens(text: str) -> list[str]:
     out = []
     for w in WORD.findall(text):
@@ -55,20 +60,43 @@ class Embedder:
                RETRIEVAL_PYTHON, "-I", str(ROOT / "smb/memory/embed_server.py"), EMBED_MODEL]
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                                      env={"PATH": "/usr/bin:/bin", "HOME": str(cache), "OMP_NUM_THREADS": "1"})
-        self.lock = threading.Lock()
+        if not hasattr(self, "lock"):
+            self.lock = threading.Lock()
         ready = json.loads(self.proc.stdout.readline())
         assert ready.get("ready"), ready
 
     def embed(self, texts: list[str], query: bool = False) -> np.ndarray:
+        texts = [clean(t) for t in texts]
         with self.lock:
-            self.proc.stdin.write(json.dumps({"texts": texts, "query": query}) + "\n")
-            self.proc.stdin.flush()
-            return np.array(json.loads(self.proc.stdout.readline())["vecs"], dtype=np.float32)
+            for attempt in range(2):  # a dead server is restarted once; a second failure is a harness error
+                try:
+                    self.proc.stdin.write(json.dumps({"texts": texts, "query": query}) + "\n")
+                    self.proc.stdin.flush()
+                    line = self.proc.stdout.readline()
+                    if not line:
+                        raise BrokenPipeError("embedding server exited")
+                    reply = json.loads(line)
+                    if "error" in reply:
+                        raise RuntimeError(f"embedding server: {reply['error']}")
+                    return np.array(reply["vecs"], dtype=np.float32)
+                except (BrokenPipeError, OSError, ValueError):
+                    if attempt:
+                        raise
+                    self.close()
+                    self.__init__()
+            raise AssertionError("unreachable")
 
     def close(self) -> None:
-        if self.proc.poll() is None:
-            self.proc.stdin.close()
+        for f in (self.proc.stdin, self.proc.stdout):
+            try:
+                f.close()
+            except OSError:
+                pass
+        try:
             self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
 
 
 class Index:

@@ -16,11 +16,12 @@ from pathlib import Path
 
 def profile(write_root: Path, extra_reads: tuple[Path, ...] = ()) -> str:
     """No network; writes only inside write_root; no file data reads anywhere under the home directory (the
-    benchmark repo with its .git, other workspaces, other projects) or in the shared temp dirs, except write_root,
-    the project's venv and `extra_reads`."""
+    benchmark repo with its .git, other workspaces, other projects) or in the shared temp dirs (/private/tmp,
+    /private/var/tmp, /private/var/folders), except write_root, the project's venv and `extra_reads` (the
+    embedder's interpreter, model and server script). Interpreters themselves must live outside $HOME."""
     from smb.paths import ROOT
     w = str(write_root.resolve())
-    deny = " ".join(f'(subpath "{d}")' for d in (str(Path.home().resolve()), "/private/tmp", "/private/var/folders"))
+    deny = " ".join(f'(subpath "{d}")' for d in (str(Path.home().resolve()), "/private/tmp", "/private/var/tmp", "/private/var/folders"))
     allow = " ".join(f'(subpath "{d}")' for d in (w, str((ROOT / ".venv").resolve()), *(str(Path(x).resolve()) for x in extra_reads)))
     return (
         "(version 1)\n(allow default)\n"

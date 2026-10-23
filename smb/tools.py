@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,12 +77,25 @@ class Workspace:
             raise ToolError(f"no such file or directory: {rel}")
         return p
 
+    def _walk(self, base: Path):
+        """Regular files under base, never following or listing symlinks (agent code can create them)."""
+        root = self.root.resolve()
+        for p in sorted(base.rglob("*")):
+            rel = p.relative_to(self.root)
+            if set(rel.parts) & SKIP or any((self.root / Path(*rel.parts[: i + 1])).is_symlink() for i in range(len(rel.parts))):
+                continue
+            if root != p.resolve() and root not in p.resolve().parents:
+                continue
+            yield p, rel
+
     def files(self) -> dict[str, bytes]:
         out = {}
-        for p in sorted(self.root.rglob("*")):
-            rel = p.relative_to(self.root)
-            if p.is_file() and not p.is_symlink() and not (set(rel.parts) & SKIP):
-                out[rel.as_posix()] = p.read_bytes()
+        for p, rel in self._walk(self.root):
+            if p.is_file() and stat.S_ISREG(p.lstat().st_mode):
+                try:
+                    out[rel.as_posix()] = p.read_bytes()
+                except OSError:  # e.g. a file the agent's own code made unreadable
+                    continue
         return out
 
     # tools -----------------------------------------------------------------
@@ -90,32 +104,34 @@ class Workspace:
         if not base.is_dir():
             raise ToolError(f"not a directory: {path}")
         entries = []
-        for p in sorted(base.rglob("*")):
-            rel = p.relative_to(self.root)
-            if set(rel.parts) & SKIP:
-                continue
+        for p, rel in self._walk(base):
             entries.append(rel.as_posix() + ("/" if p.is_dir() else ""))
             if len(entries) >= 200:
                 entries.append("[more entries not shown]")
                 break
         return "\n".join(entries) or "(empty)"
 
+    def _regular(self, p: Path, path: str) -> None:
+        if p.exists() and not stat.S_ISREG(p.lstat().st_mode):
+            raise ToolError(f"not a regular file: {path}")
+
     def read_file(self, path: str) -> str:
         p = self._resolve(path)
         if not p.is_file():
             raise ToolError(f"not a file: {path}")
+        self._regular(p, path)
         return _clip(p.read_text(encoding="utf-8", errors="replace"))
 
     def search_code(self, pattern: str, path: str = ".") -> str:
         try:
             rx = re.compile(pattern)
-        except re.error as exc:
+        except (re.error, OverflowError, RecursionError) as exc:
             raise ToolError(f"bad regular expression: {exc}")
         base = self._resolve(path)
         hits = []
-        for p in sorted(base.rglob("*") if base.is_dir() else [base]):
-            rel = p.relative_to(self.root)
-            if not p.is_file() or set(rel.parts) & SKIP:
+        candidates = list(self._walk(base)) if base.is_dir() else [(base, base.relative_to(self.root))]
+        for p, rel in candidates:
+            if not p.is_file() or not stat.S_ISREG(p.lstat().st_mode) or set(rel.parts) & SKIP:
                 continue
             for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                 if rx.search(line):
@@ -126,6 +142,7 @@ class Workspace:
 
     def write_file(self, path: str, content: str) -> str:
         p = self._resolve(path, must_exist=False)
+        self._regular(p, path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         self.edits.append(p.relative_to(self.root).as_posix())
@@ -133,6 +150,7 @@ class Workspace:
 
     def replace_in_file(self, path: str, old_text: str, new_text: str) -> str:
         p = self._resolve(path)
+        self._regular(p, path)
         text = p.read_text(encoding="utf-8")
         n = text.count(old_text)
         if n != 1:
@@ -164,6 +182,12 @@ class Workspace:
         if any(not isinstance(v, str) for v in args.values()):
             raise ToolError("tool arguments must be strings")
         if name == "run_tests":
+            target = args.get("path")
+            if target is not None:
+                try:
+                    self._resolve(target)
+                except (OSError, ValueError) as exc:
+                    raise ToolError(f"bad path: {type(exc).__name__}: {exc}") from None
             try:
                 return fn(**args)
             except TypeError as exc:
@@ -172,5 +196,5 @@ class Workspace:
             return fn(**args)
         except TypeError as exc:
             raise ToolError(f"bad arguments: {exc}") from None
-        except (OSError, UnicodeError, ValueError) as exc:
+        except (OSError, UnicodeError, ValueError, OverflowError, RecursionError, re.error) as exc:
             raise ToolError(f"{type(exc).__name__}: {exc}") from None

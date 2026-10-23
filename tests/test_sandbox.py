@@ -74,12 +74,16 @@ def test_git_history_and_home_are_unreadable():
     own = WORK / "w" / "test-git-probe"
     own.mkdir(parents=True, exist_ok=True)
     try:
+        probe = ROOT / ".work" / f"home-probe-{own.name}.txt"  # a real file under $HOME, outside the workspace
+        probe.parent.mkdir(exist_ok=True)
+        probe.write_text("secret")
         code = (
             "import subprocess, os\n"
             f"r = subprocess.run(['git', '-C', {str(ROOT)!r}, 'show', 'HEAD:lessons.yaml'], capture_output=True, text=True)\n"
             "print('GIT', r.returncode, len(r.stdout))\n"
-            f"for p in [{str(ROOT / '.git' / 'HEAD')!r}, {str(ROOT / 'smb' / 'agent.py')!r}, os.path.expanduser('~/.zshrc')]:\n"
-            "    try:\n        open(p).read(); print('READ', p)\n    except OSError:\n        print('DENIED')\n"
+            f"for p in [{str(ROOT / '.git' / 'HEAD')!r}, {str(ROOT / 'smb' / 'agent.py')!r}, {str(probe)!r}]:\n"
+            "    try:\n        open(p).read(); print('READ', p)\n    except PermissionError:\n        print('DENIED')\n"
+            "    except OSError as e:\n        print('OTHER', type(e).__name__)\n"
         )
         env = sandbox.base_env(own / ".home", "UTC")
         r = sandbox.run([sys.executable, "-c", code], cwd=own, write_root=own, env=env, timeout=60)
@@ -88,3 +92,4 @@ def test_git_history_and_home_are_unreadable():
         assert git_line.split()[1] != "0" or git_line.split()[2] == "0", r.output
     finally:
         shutil.rmtree(own, ignore_errors=True)
+        (ROOT / '.work' / f'home-probe-{own.name}.txt').unlink(missing_ok=True)

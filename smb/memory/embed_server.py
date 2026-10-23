@@ -25,9 +25,17 @@ def main(model_dir: str) -> None:
     sess = ort.InferenceSession(str(model / "onnx" / "model.onnx"), sess_options=opts, providers=["CPUExecutionProvider"])
     print(json.dumps({"ready": True}), flush=True)
     for line in sys.stdin:
-        req = json.loads(line)
-        texts = [(QUERY_PREFIX + t) if req.get("query") else t for t in req["texts"]]
-        out = []
+        try:
+            req = json.loads(line)
+            texts = [(QUERY_PREFIX + t) if req.get("query") else t for t in req["texts"]]
+            print(json.dumps({"vecs": embed(tok, sess, texts)}), flush=True)
+        except Exception as exc:  # noqa: BLE001 - one bad request must not kill the server
+            print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}), flush=True)
+
+
+def embed(tok, sess, texts):
+    out = []
+    if True:
         for i in range(0, len(texts), 32):
             encs = tok.encode_batch(texts[i:i + 32])
             width = max(len(e.ids) for e in encs)
@@ -39,7 +47,7 @@ def main(model_dir: str) -> None:
             cls = sess.run(None, {"input_ids": ids, "attention_mask": mask, "token_type_ids": np.zeros_like(ids)})[0][:, 0, :]
             cls = cls / np.linalg.norm(cls, axis=1, keepdims=True)
             out.extend(np.round(cls, 6).tolist())
-        print(json.dumps({"vecs": out}), flush=True)
+    return out
 
 
 if __name__ == "__main__":
