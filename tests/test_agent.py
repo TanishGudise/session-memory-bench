@@ -110,9 +110,12 @@ def test_the_deadline_counts_wall_time_through_a_sleep(monkeypatch):
     from smb import agent
     stuck = threading.Event()
     real_time = agent.time.time
-    t0 = real_time()
-    # wall time jumps ahead as if the machine slept, while the join's own clock barely moves
-    monkeypatch.setattr(agent.time, "time", lambda: real_time() + (10_000 if real_time() - t0 > 0.3 else 0))
+    calls = []
+
+    def fake_time():  # wall time jumps ahead after the deadline is set, as if the machine slept
+        calls.append(1)
+        return real_time() + (10_000 if len(calls) > 1 else 0)
+    monkeypatch.setattr(agent.time, "time", fake_time)
     start = real_time()
     with pytest.raises(agent.CallDeadline):
         agent._with_deadline(lambda: stuck.wait(30), 1000.0)

@@ -68,6 +68,7 @@ def spent(stage: str | None = None) -> float:
 
 
 def on_ac_power() -> bool | None:
+    """True on AC power, False on battery, None when pmset can't tell."""
     try:
         out = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=10).stdout
     except (OSError, subprocess.SubprocessError):
@@ -262,10 +263,12 @@ def main() -> int:
         except BlockingIOError:
             raise SystemExit(f"another process is running stage {stage}")
         locks.append(fh)
-    if not a.stub and on_ac_power() is False:  # sleep stops the request clocks (Amendment 1, item 4)
-        if getattr(a, "stage", None) == "main":
-            raise SystemExit("the main stage runs on AC power only: plug in, keep the lid open, and run under caffeinate -s")
-        print(json.dumps({"warning": "on battery: keep the lid open; a sleep stalls requests until the wall-clock deadline"}))
+    if not a.stub:  # paid stages run on AC power (Amendment 1, item 4): sleep stalls requests until the deadline
+        power = on_ac_power()
+        if power is False:
+            raise SystemExit("paid stages run on AC power only: plug in, keep the lid open, and run under caffeinate -s")
+        if power is None:
+            print(json.dumps({"warning": "can't read the power source (pmset); make sure the Mac is on AC power with the lid open"}))
     s = Session(a.stub, RUNS / "logs")
     try:
         {"history": cmd_history, "distill": cmd_distill, "freeze-corpus": cmd_freeze_corpus, "eval": cmd_eval}[a.cmd](a, s)

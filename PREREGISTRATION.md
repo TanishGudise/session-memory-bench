@@ -228,5 +228,6 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
    - From now on:
      - a request that hasn't returned 120 seconds after its own timeout, counted in wall time, is abandoned, booked at its worst case, and retried as a transient error (same 3 attempts);
      - a request interrupted by Ctrl-C is booked at its worst case;
-     - paid stages run on AC power, with the lid open and system sleep prevented (`caffeinate -s`); the main stage refuses to start on battery.
+     - paid stages run on AC power, with the lid open and system sleep prevented (`caffeinate -s`); paid stages refuse to start on battery.
    - Calls that return are unaffected.
+5. **Re-freeze.** The experiment is frozen again after this amendment (`scripts/manifest.py --freeze`; `FROZEN` holds the hash). The rest of the history stage, the full-corpus freeze and the main run all run under it.
