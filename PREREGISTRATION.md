@@ -241,3 +241,11 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
 - **Allowed leak.** The leakage check flagged one string from ingest-01's reference solution: `"external_id": row["shipment_id"],`. It is allowed, through `amendments/allowed_leaks_run1.json`, which is part of the corpus hash.
   - It is in the ingest-H1 transcript because that session's agent read `scripts/backfill_kestrel.py`, which was in the repo at the time.
   - It only maps a CSV column that ingest-01's prompt names (`shipment_id`) to the schema's `external_id` field. It carries nothing about the task's lesson (Kestrel times are Europe/Berlin local time), and no hidden lesson test depends on it.
+
+### Amendment 3 — 2026-10-23, after the main run (records only; nothing is rescored)
+
+- **Deviation.** The last 149 main-run episodes (after 811 of 960, from 18:34) ran on battery, against item 4 of Amendment 1. The lid stayed open, and the power log shows no sleep in that window. No call was abandoned or booked at its worst case.
+- **notify-05.** Found after the run. Its functional test expects users without an email address to be skipped, which the prompt doesn't state; `mailer.dispatch()` raises for them.
+  - It accounts for every S failure, in every condition. All notify-05 episodes passed its lesson tests, and none followed the old rule.
+  - The registered tests include it. RESULTS.md adds a sensitivity line that leaves it out.
+- **Manifest.** The main run started under FROZEN `38c856a4…` (recorded in `runs/eval/main/run.json`). This amendment changes the manifest after the run.

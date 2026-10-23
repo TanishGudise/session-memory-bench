@@ -49,7 +49,7 @@ The design, metrics and stop rules were registered before any model call: [PRERE
 
 ## Results
 
-The pilot is done (`PILOT.md`): all three gates passed, at $0.27. The main run (5 epochs, Amendment 1) and the Sonnet check have not run yet. The paid stages are pilot, history, main run and a Sonnet check, capped at $17.50 in total.
+The pilot (`PILOT.md`) and the main run (`RESULTS.md`; 960 episodes, 5 epochs) are done, at $3.64 in total. The Sonnet check has not run yet. The paid stages are pilot, history, main run and a Sonnet check, capped at $17.50 in total.
 
 ## Validation ($0)
 
