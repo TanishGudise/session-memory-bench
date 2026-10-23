@@ -245,7 +245,8 @@ The pilot (PILOT.md) passed G2 and spent $0.27. It projects the 3-epoch main run
 ### Amendment 3 — 2026-10-23, after the main run (records only; nothing is rescored)
 
 - **Deviation.** The last 149 main-run episodes (after 811 of 960, from 18:34) ran on battery, against item 4 of Amendment 1. The lid stayed open, and the power log shows no sleep in that window. No call was abandoned or booked at its worst case.
-- **notify-05.** Found after the run. Its functional test expects users without an email address to be skipped, which the prompt doesn't state; `mailer.dispatch()` raises for them.
-  - It accounts for every S failure, in every condition. All notify-05 episodes passed its lesson tests, and none followed the old rule.
-  - The registered tests include it. RESULTS.md adds a sensitivity line that leaves it out.
+- **notify-05, a task defect under G4.** It surfaced through G4's "S tasks where a and c disagree" list.
+  - Its functional test expects users without an email address to be skipped, which the prompt doesn't state; `mailer.dispatch()` raises for them. That requirement is unrelated to the lesson under test.
+  - It accounts for every S failure, in every condition. All 30 notify-05 episodes passed its lesson tests, and none followed the old rule.
+  - Final code snapshots are not stored, so the episodes can't be re-graded. As G4 allows, the task is excluded with this reason: `analyze.py --exclude-tasks notify-05`, output in `runs/eval/main/g4_excl_notify-05/`. The as-run numbers that include it are reported alongside. The exclusion changes no conclusion: Family B has no discordant pairs without it and p = 1 with it.
 - **Manifest.** The main run started under FROZEN `38c856a4…` (recorded in `runs/eval/main/run.json`). This amendment changes the manifest after the run.

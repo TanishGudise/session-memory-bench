@@ -36,7 +36,7 @@ These are single-epoch counts on one repo. They size the main run; they are not 
 | history (7 sessions) | 65 | 0.0235 |
 | distillation | 7 | 0.0068 |
 | eval (68 episodes) | 433 | 0.2391 |
-| pilot total | 505 | **0.2694** of the $1.50 cap |
+| pilot total | 505 | **0.2695** of the $1.50 cap |
 
 No request was booked at its worst case (no timeouts or dropped connections).
 

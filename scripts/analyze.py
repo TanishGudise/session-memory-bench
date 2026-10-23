@@ -139,9 +139,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
     ap.add_argument("--corpus")
+    ap.add_argument("--exclude-tasks", nargs="*", default=[], help="tasks excluded under G4 (a defect, with the reason in an amendment)")
+    ap.add_argument("--out", help="write analysis.json/md here instead of the run directory")
     a = ap.parse_args()
     run = Path(a.run)
-    rows = load(run)
+    rows = [r for r in load(run) if r["task"] not in set(a.exclude_tasks)]
+    out_dir = Path(a.out) if a.out else run
+    out_dir.mkdir(parents=True, exist_ok=True)
     L = lessons()
     chunk_source = {}
     if a.corpus:
@@ -154,7 +158,8 @@ def main() -> int:
     if a.corpus and (Path(a.corpus) / "raw_blocks.json").exists():
         for repo, blk in json.loads((Path(a.corpus) / "raw_blocks.json").read_text()).items():
             raw_patterns[repo] = {lid for lid, l in _L.items() if any(re.search(pt, blk["block"], re.I) for pt in l.get("patterns", []))}
-    res = {"episodes": len(rows), "excluded": [r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)]}
+    res = {"episodes": len(rows), "excluded": [r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)],
+           "excluded_tasks_g4": sorted(a.exclude_tasks)}
     if a.corpus:  # history attempts that were discarded and re-drawn (PREREGISTRATION: reported with their causes)
         att = {f.parent.name: [{"attempt": r.get("attempt"), "problem": r.get("problem")} for r in attempt_lines(f)]
                for f in sorted(Path(a.corpus).glob("*/attempts.jsonl"))}
@@ -323,7 +328,7 @@ def main() -> int:
         "S_tasks_a_vs_c_disagree": s_disagree,
         "random_10pct_seed0": sample,
     }
-    (run / "analysis.json").write_text(json.dumps(res, indent=2, default=str))
+    (out_dir / "analysis.json").write_text(json.dumps(res, indent=2, default=str))
     lines = ["| cond | " + " | ".join(FAMS) + " | all |", "|---" * (len(FAMS) + 2) + "|"]
     for c in CONDITIONS:
         cells = [f"{rates[f'{c}/{f}']['k']}/{rates[f'{c}/{f}']['n']}" for f in FAMS + ["ALL"]]
@@ -359,7 +364,7 @@ def main() -> int:
               "| cond/task | seen | pass if seen | pass if unseen | followed old rule |", "|---|---|---|---|---|"]
     for k, v in res["change_visibility_S"]["by_condition_task"].items():
         lines.append(f"| {k} | {v['seen']}/{v['episodes']} | {v['pass_if_seen']} | {v['pass_if_unseen']} | {v['followed_old_rule']} |")
-    (run / "analysis.md").write_text("\n".join(lines) + "\n")
+    (out_dir / "analysis.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     return 0
 
