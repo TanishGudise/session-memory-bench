@@ -28,7 +28,8 @@ from smb.tasks import Task
 SUSPICIOUS = re.compile(r"junit|_pytest|\bpytest\b|atexit|os\._exit|sys\.exit|ctypes|\bgc\.|\binspect\b|sys\.modules"
                         r"|__eq__|__ne__|__hash__|builtins|setattr\(|monkeypatch|\bTZ\b|tzset|os\.environ"
                         r"|process\.exit|node:test|node:assert|\bassert\b[^;\n]*\)\s*\.\w+\s*=|assert\.\w+\s*="
-                        r"|defineProperty|prototype|process\.env|--test|reporter")
+                        r"|defineProperty|prototype|process\.env|--test|reporter"
+                        r"|assert/strict|[\"']assert[\"']|Object\.(assign|setPrototypeOf)|\btype\(\s*[\"']|__\w*\"\s*\+")
 TS_TEST = re.compile(r"""\btest\(\s*(["'`])((?:func|lesson|diag): (?:(?!\1).)+)\1""")
 TIMEOUT = 120
 

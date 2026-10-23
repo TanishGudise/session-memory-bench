@@ -18,10 +18,9 @@ test("func: reserves every item", () => {
   assert.equal(db.reserved.get("CUP-2"), 1);
 });
 
-test("lesson: short on one item reserves nothing", () => {
+test("lesson: a shortfall is refused, not backordered", () => {
   const db = setup();
-  assert.throws(() => reserveBundle(db, [{ sku: "MUG-1", qty: 2 }, { sku: "CUP-2", qty: 3 }]));
-  assert.equal(db.reserved.get("MUG-1") ?? 0, 0);
+  assert.throws(() => reserveBundle(db, [{ sku: "CUP-2", qty: 3 }]));
   assert.equal(db.reserved.get("CUP-2") ?? 0, 0);
 });
 

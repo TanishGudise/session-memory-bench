@@ -174,6 +174,14 @@ class Note:
     pattern_lessons: list[str] = field(default_factory=list)
 
 
+def distilled_index_chunks(corpus_dir: Path) -> list[Chunk]:
+    """Condition d's index: the notes distilled from each session plus the team chat messages verbatim (chat is
+    already short), so lessons that only chat holds are reachable in every memory condition."""
+    from smb.memory.corpus import load as load_chunks
+    chat = [c for c in load_chunks(corpus_dir / "chunks.jsonl") if c.kind == "chat"]
+    return notes_as_chunks(corpus_dir / "notes.jsonl", corpus_dir / "notes_labels.json") + chat
+
+
 def notes_as_chunks(notes_path: Path, labels_path: Path) -> list[Chunk]:
     """Distilled notes as retrievable chunks, labelled with the frozen hand labels (notes_labels.json)."""
     labels = json.loads(labels_path.read_text())

@@ -28,8 +28,9 @@ def test_func_existing_customers_keep_their_address(tmp_path):
 
 def test_lesson_old_column_still_exists(tmp_path):
     s = Store(_old_db(tmp_path))
-    cols = {row[1] for row in s.conn.execute("PRAGMA table_info(customers)")}
-    assert {"email", "billing_email"} <= cols
+    cols = {row[1]: row for row in s.conn.execute("PRAGMA table_info(customers)")}
+    assert {"email", "billing_email"} <= set(cols)
+    assert cols["email"][3] == 1  # the original NOT NULL column, not one dropped and re-added
     assert s.conn.execute("SELECT email FROM customers WHERE id = 'c_old'").fetchone()[0] == "old@example.com"
 
 

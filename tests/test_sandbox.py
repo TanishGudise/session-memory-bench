@@ -1,12 +1,26 @@
+import shutil
 import sys
 import time
+import uuid
+
+import pytest
 
 from smb import sandbox
+from smb.paths import WORK
+
+
+@pytest.fixture
+def tmp_path():
+    """Sandboxed code can't read the system temp dirs, so these tests use a directory under SMB_WORK."""
+    d = WORK / "t" / uuid.uuid4().hex[:12]
+    (d / "w").mkdir(parents=True)
+    yield d
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def _run(tmp_path, code, timeout=30):
-    env = sandbox.base_env(tmp_path / "home", "UTC")
-    return sandbox.run([sys.executable, "-c", code], cwd=tmp_path, write_root=tmp_path / "w", env=env, timeout=timeout)
+    env = sandbox.base_env(tmp_path / "w" / "home", "UTC")
+    return sandbox.run([sys.executable, "-c", code], cwd=tmp_path / "w", write_root=tmp_path / "w", env=env, timeout=timeout)
 
 
 def test_network_is_denied(tmp_path):
@@ -51,4 +65,26 @@ def test_benchmark_files_and_other_workspaces_are_unreadable(tmp_path):
     finally:
         import shutil
         shutil.rmtree(other, ignore_errors=True)
+        shutil.rmtree(own, ignore_errors=True)
+
+
+def test_git_history_and_home_are_unreadable():
+    import shutil
+    from smb.paths import ROOT, WORK
+    own = WORK / "w" / "test-git-probe"
+    own.mkdir(parents=True, exist_ok=True)
+    try:
+        code = (
+            "import subprocess, os\n"
+            f"r = subprocess.run(['git', '-C', {str(ROOT)!r}, 'show', 'HEAD:lessons.yaml'], capture_output=True, text=True)\n"
+            "print('GIT', r.returncode, len(r.stdout))\n"
+            f"for p in [{str(ROOT / '.git' / 'HEAD')!r}, {str(ROOT / 'smb' / 'agent.py')!r}, os.path.expanduser('~/.zshrc')]:\n"
+            "    try:\n        open(p).read(); print('READ', p)\n    except OSError:\n        print('DENIED')\n"
+        )
+        env = sandbox.base_env(own / ".home", "UTC")
+        r = sandbox.run([sys.executable, "-c", code], cwd=own, write_root=own, env=env, timeout=60)
+        assert "READ" not in r.output and r.output.count("DENIED") == 3, r.output
+        git_line = [l for l in r.output.splitlines() if l.startswith("GIT")][0]
+        assert git_line.split()[1] != "0" or git_line.split()[2] == "0", r.output
+    finally:
         shutil.rmtree(own, ignore_errors=True)

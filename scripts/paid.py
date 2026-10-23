@@ -1,10 +1,12 @@
 """Entry point for model-backed stages. Refuses to start unless the manifest equals FROZEN (or --stub).
 
-  python scripts/paid.py history --stage pilot --corpus haiku-1 --repos billing
-  python scripts/paid.py distill --stage history --corpus haiku-1
-  (hand-label the notes: python scripts/label_notes.py haiku-1, then review notes_labels.json)
-  python scripts/paid.py freeze-corpus --corpus haiku-1
-  python scripts/paid.py eval --stage pilot --run pilot --corpus haiku-1 --repos billing --epochs 1
+  pilot:  history --stage pilot --corpus c1 --repos billing; distill --stage pilot --corpus c1 --repos billing;
+          label_notes.py c1 (review by hand); freeze-corpus --corpus c1 --repos billing;
+          eval --stage pilot --run pilot --corpus c1 --repos billing;
+          eval --stage pilot --run pilot --corpus c1 --repos notify inventory ingest --families M --conditions a g
+  then:   history --stage history --corpus c1 --repos notify inventory ingest; distill (same); label_notes.py c1;
+          freeze-corpus --corpus c1 (all repos; extends the pilot freeze); eval --stage main --run main --corpus c1 --epochs 3;
+          eval --stage sonnet --model sonnet --run sonnet --corpus c1 --families S-u S-s --conditions a c
   (add --stub to any of them for a $0 run with the stub models)
 
 Spend: each stage has the cap registered in PREREGISTRATION.md (STAGE_CAPS); its meter starts from what that stage
@@ -39,7 +41,7 @@ from smb.history import run_session  # noqa: E402
 from smb.memory import corpus as corpus_mod  # noqa: E402
 from smb.memory.distill import model_notes, session_text, stub_notes, write_notes  # noqa: E402
 from smb.memory.freeze import freeze, stub_labels, verify  # noqa: E402
-from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, estimate_tokens, notes_as_chunks  # noqa: E402
+from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, distilled_index_chunks, estimate_tokens  # noqa: E402
 from smb.memory.retriever import Index  # noqa: E402
 from smb.meter import Meter  # noqa: E402
 from smb.paths import RUNS, WORK  # noqa: E402
@@ -147,7 +149,7 @@ def cmd_freeze_corpus(a, s: Session):
     if a.stub and not (corpus_dir / "notes_labels.json").exists():
         stub_labels(corpus_dir)
     allowed = set(json.loads(Path(a.allow_leaks).read_text())) if a.allow_leaks else None
-    m = freeze(corpus_dir, token_counter(s, a.stub), allowed, repos=a.repos)
+    m = freeze(corpus_dir, token_counter(s, a.stub), allowed, repos=a.repos, force=a.force)
     print(json.dumps({"corpus_sha256": m["sha256"], "repos": m["repos"], "chunks": m["chunks"], "notes": m["notes"], "raw": m["raw"]}))
 
 
@@ -163,7 +165,7 @@ def cmd_distill(a, s: Session):
             notes[sid] = stub_notes(spec)
         else:
             notes[sid], _ = model_notes(s.client(), MODELS[a.model], spec, session_text(corpus_dir, sid), meter)
-    raw_path.write_text(json.dumps(notes, indent=2, ensure_ascii=False))
+        raw_path.write_text(json.dumps(notes, indent=2, ensure_ascii=False))  # after every session: nothing paid is lost
     write_notes(corpus_dir, notes)
     print(json.dumps({"stage": "distill", "notes": sum(len(v) for v in notes.values()), "spent": round(meter.spent, 4)}))
 
@@ -177,11 +179,17 @@ def cmd_eval(a, s: Session):
         raise SystemExit("the main and Sonnet stages need the corpus of all four repos frozen")
     meter = meter_for(run_dir, a.stage, a.stub)
     model = "stub" if a.stub else MODELS[a.model]
-    (run_dir / "run.json").write_text(json.dumps({"corpus": a.corpus, "corpus_sha256": corpus_sha, "model": model,
-                                                  "stage": a.stage, "manifest_sha256": manifest.build()["manifest_sha256"]}))
+    run_info = {"corpus": a.corpus, "corpus_sha256": corpus_sha, "model": model, "stage": a.stage,
+                "manifest_sha256": manifest.build()["manifest_sha256"]}
+    if (run_dir / "run.json").exists():  # a resume must use the same corpus, model, stage and task definitions
+        prev = json.loads((run_dir / "run.json").read_text())
+        if prev != run_info:
+            raise SystemExit(f"run {a.run} was started with {prev}; refusing to resume with {run_info}")
+    else:
+        (run_dir / "run.json").write_text(json.dumps(run_info))
     chunks = corpus_mod.load(corpus_dir / "chunks.jsonl")
     idx = Index(chunks)
-    notes_idx = Index(notes_as_chunks(corpus_dir / "notes.jsonl", corpus_dir / "notes_labels.json"), embedder=idx.embedder)
+    notes_idx = Index(distilled_index_chunks(corpus_dir), embedder=idx.embedder)
     raw = FrozenRaw(json.loads((corpus_dir / "raw_blocks.json").read_text()))
     providers = {"none": NoMemory(), "raw": raw, "retrieved": Retrieved(idx),
                  "distilled": Retrieved(notes_idx, budget_chars=3500), "pull": Pull(idx)}
@@ -195,7 +203,7 @@ def cmd_eval(a, s: Session):
     def one(job):
         t, c, e = job
         client = s.client(EvalStub(t, pull=CONDITIONS[c] == "pull") if a.stub else None)
-        r = run_episode(t, c, e, client, model, providers, run_dir, meter, Limits())
+        r = run_episode(t, c, e, client, model, providers, run_dir, meter, Limits(), corpus_sha256=corpus_sha)
         print(json.dumps({k: r[k] for k in ("episode", "stop", "score", "calls", "cost")}), flush=True)
         return r
 
@@ -218,6 +226,7 @@ def main() -> int:
             p.add_argument("--stage", choices=sorted(STAGE_CAPS), required=True)
         else:
             p.add_argument("--allow-leaks", help="JSON list of reviewed false-positive answer strings (an amendment)")
+            p.add_argument("--force", action="store_true", help="replace an existing freeze (record an amendment)")
         if name == "eval":
             p.add_argument("--run", required=True)
             p.add_argument("--epochs", type=int, default=1)
@@ -226,6 +235,11 @@ def main() -> int:
             p.add_argument("--tasks", nargs="*")
             p.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()
+    allowed = {"history": ("pilot", "history"), "distill": ("pilot", "history"), "eval": ("pilot", "main", "sonnet")}
+    if a.cmd in allowed and a.stage not in allowed[a.cmd]:
+        raise SystemExit(f"{a.cmd} runs in stage {' or '.join(allowed[a.cmd])}, not {a.stage}")
+    if a.cmd in ("history", "distill") and (a.stage == "pilot") != (sorted(a.repos) == ["billing"]):
+        raise SystemExit("billing's history and distillation are the pilot stage; the other repos are the history stage")
     s = Session(a.stub, RUNS / "logs")
     try:
         {"history": cmd_history, "distill": cmd_distill, "freeze-corpus": cmd_freeze_corpus, "eval": cmd_eval}[a.cmd](a, s)

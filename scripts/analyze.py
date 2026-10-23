@@ -78,8 +78,8 @@ def breakdown(r):
         if diag:
             return "followed_old_rule"
         return "current_recalled_not_applied" if need and need <= got and lesson_fail else "other"
-    if r["family"] == "X" and diag:
-        return "followed_other_repo_rule"
+    if r["family"] == "X":  # the X tasks' own rule lives in the code, not in memory
+        return "followed_other_repo_rule" if diag else "other"
     if not need <= got:
         return "not_retrieved"
     return "retrieved_not_applied" if lesson_fail else "other"

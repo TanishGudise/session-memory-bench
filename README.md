@@ -23,7 +23,7 @@ The design, metrics and stop rules were registered before any model call: [PRERE
 
    | family | n | what it tests |
    |---|---|---|
-   | M, memory-only | 14 | the rule is stated only in earlier sessions, reviews or chat (checked: no line of the code matches its evidence patterns) |
+   | M, memory-only | 14 | the rule is stated only in earlier sessions, reviews or chat (checked: no line of the code matches the lesson's evidence patterns) |
    | D, discoverable | 4 | the code already shows the convention; memory can only save exploration |
    | S-u, stale | 4 | memory holds an old rule; a later change nobody recorded in a session replaced it, and the code shows the new one |
    | S-s, superseded | 4 | memory holds the old rule and the later session that changed it |
@@ -37,13 +37,14 @@ The design, metrics and stop rules were registered before any model call: [PRERE
    | a | none | nothing |
    | b | raw | this repo's transcripts, newest first, whole sessions, plus chat, within 40k tokens |
    | c | retrieved | hybrid BM25 + embedding search over all sessions and chat, queried with the prompt, the previous assistant turn and repo/branch (what a memory hook sees when a prompt is submitted), injected with the prompt |
-   | d | distilled | notes distilled from each session, retrieved the same way |
+   | d | distilled | notes distilled from each session, plus the team chat, retrieved the same way |
    | f | pull | nothing injected; the agent can call `search_memory` |
    | g | oracle | the exact lesson, the ceiling |
 
 5. **Grading.** Hidden tests tagged `func` (the feature works), `lesson` (it follows the team's rule) and `diag` (diagnostics such as "followed the old rule", not scored). Each failure is classified from the lesson labels and the test kinds: *not retrieved*, *retrieved but not applied*, *followed the old rule*, *followed the other repo's rule*, or *other*.
-   - A chunk carries a lesson when it contains the sentence that states the rule.
+   - A chunk carries a lesson when it contains at least 60 consecutive characters of the sentence that states the rule.
    - Distilled notes carry the lessons a person assigned to them before the run.
+   - Stale and superseded tasks add *old rule recalled, not followed* and *current rule recalled, not applied*.
 
 ## Results
 
@@ -58,7 +59,7 @@ Not run yet. The paid stages are pilot, history, main run and a Sonnet check, ca
   - the last two also trip their diagnostic;
 - every solution passes the visible test suite, so the visible tests don't give the lesson away;
 - every history session's start state and checks;
-- that memory-only lessons leave no trace in the code;
+- that no line of the eval-time code matches a memory-only lesson's evidence patterns;
 - that no oracle line or hidden-test string appears in the tickets, reviews and chat. The same check runs on the agents' own transcripts and notes when the corpus is frozen.
 
 `python scripts/stub_e2e.py` runs every stage end to end with stub models and no network. The stages are history, distillation, freeze, and all 32 tasks × 6 conditions.
@@ -96,12 +97,13 @@ python scripts/paid.py distill --stage pilot --corpus run1 --repos billing
 python scripts/label_notes.py run1                     # then review the labels by hand
 python scripts/paid.py freeze-corpus --corpus run1 --repos billing
 python scripts/paid.py eval --stage pilot --run pilot --corpus run1 --repos billing --epochs 1
+python scripts/paid.py eval --stage pilot --run pilot --corpus run1 --repos notify inventory ingest --families M --conditions a g
 python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 ```
 
 Paid stages read the API key from a gitignored `.env`.
 - All model traffic goes through a loopback proxy that allows only the API host, and the run process can open loopback connections only.
-- Agent code, graders and the embedder run sandboxed: no network, and no reads of the benchmark's own files.
+- Agent code, graders and the embedder run sandboxed: no network, and no reads of file contents under the home directory (the benchmark, its git history, other workspaces) or the shared temp dirs, except their own directory and the Python environment.
 - Every request, including every retry, reserves its worst-case cost against its stage's cap before it is sent. A request that may have been billed without returning usage is booked at that worst case.
 
 ## Limits

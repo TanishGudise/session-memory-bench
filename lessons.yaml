@@ -9,6 +9,7 @@ billing.gateway-idempotency:
   spans:
     billing-H1:
       - "every gateway write (charges, refunds, anything new we add) has to pass an idempotency key that is deterministic for the logical operation, built with op_key(invoice_id, op, n), and the retry has to reuse that same key"
+      - "The retry has to send the same idempotency key."
   note: Every gateway write (charge, refund, anything new) passes an idempotency key that is deterministic for the logical operation, built with payments.op_key(invoice_id, op, n), and retries (payments.with_retries) reuse the same key; a timeout can arrive after the gateway already processed the request.
   patterns: [idempoten, op_key]
 billing.fetch-invoice-accessor:
@@ -31,6 +32,7 @@ billing.expand-contract:
     billing-H2:
       - "we never rename or drop a column in a single migration"
       - "Renames are expand/contract: add the new column, backfill it, have the code write both columns, and drop the old column in a later release"
+      - "During a rolling deploy the previous app version is still running and still reads the old column"
   note: Never rename or drop a column in a single migration; during a rolling deploy the old app version still reads the old column. Renames are expand/contract - add the new column, backfill it, write both columns, and drop the old one in a later release.
   patterns: [expand/contract, "rename or drop a column", rolling deploy]
   evidence: [expand, rename or drop, backfill]
@@ -115,6 +117,7 @@ notify.formal-german:
   spans:
     chat-brand-0902:
       - "all German-language customer communication uses the formal (Sie) templates, locale key de-formal"
+      - "The informal de templates are legacy and must not be used for anything new."
   note: All German-language customer communication uses the formal (Sie) templates, locale key de-formal; the informal de templates are legacy and must not be used for anything new.
   patterns: [de-formal, "formal \\(Sie\\)"]
   evidence: [locale\s*==\s*"de", formal \(Sie\), brand]

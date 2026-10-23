@@ -16,8 +16,8 @@ Registered 2026-10-22, before any model call. Changes after the first model call
   - Lessons enter memory only through these texts.
   - What lands on main is the reference step, not the agent's diff.
 - **Memory corpus.** The history transcripts (in the Claude Code session-JSONL shape), produced once by the same model and harness as the main run, plus the chat messages.
-  - `scripts/paid.py freeze-corpus` writes the chunks, the distilled notes with their hand labels, condition b's blocks and a hash of every file to `CORPUS_MANIFEST.json`.
-  - This happens before any evaluation episode. Eval refuses to run if a file no longer matches.
+  - `scripts/paid.py freeze-corpus` writes the chunks and condition b's blocks, checks the distilled notes and their hand labels (written earlier by distillation and `scripts/label_notes.py`), runs the leakage check, and writes a hash of every file to `CORPUS_MANIFEST.json`.
+  - This happens before any evaluation episode. Eval refuses to run if a file no longer matches. A freeze can't be silently replaced: a re-freeze may only add repos with the frozen sessions unchanged, and anything else needs `--force` and an amendment. A run directory refuses to resume under a different corpus, model, stage or task manifest.
   - A history session that ends on a spend cap or an API error is not kept: it is run again.
   - The pilot freezes a billing-only corpus: billing's 7 sessions plus chat. The other 19 sessions are added to the same corpus directory afterwards; billing's sessions are not re-run. The full corpus of all four repos is frozen, and its hash recorded as an amendment, before the main run. The main and Sonnet stages refuse a partial corpus.
 - **Tasks.** 32 evaluation tasks (`tasks/`), phrased the way a teammate asks: the interface to build, no hint of the lesson.
@@ -34,7 +34,7 @@ Registered 2026-10-22, before any model call. Changes after the first model call
     - `diag`: a diagnostic, such as "followed the old rule". Never scored.
   - An episode passes when it ends with `finish` and every `func` and `lesson` test passes.
   - The candidate tree is main plus only the task's editable paths from the agent's workspace. It never includes `conftest.py`, `pytest.ini`, `sitecustomize.py`, `package.json` or similar.
-  - Hidden tests run in a separate sandboxed process with no network. That process can write only in its grading directory and cannot read the benchmark's own files.
+  - Hidden tests run in a separate sandboxed process with no network. That process can write only in its grading directory, and it cannot read file contents anywhere under the home directory (including the benchmark, its git history and other workspaces) or in the shared temp directories. The exceptions are its own directory and the project's Python environment.
   - The JUnit test set must equal the hidden file's test set exactly.
   - Graders run with `TZ=America/Los_Angeles`. A grading run that times out is retried once with twice the time.
 
@@ -47,7 +47,7 @@ Same model, system prompt, task prompt, tools and budgets in every condition; on
 | a | none | no memory |
 | b | raw | this repo's session transcripts, newest first, whole sessions only, plus all chat messages, up to **40,000 tokens**. Counted once at corpus freeze by the Messages API `count_tokens` endpoint for `claude-haiku-5-5` (`raw_blocks.json`). Tool inputs are clipped to 2,000 characters and tool results to 800; task, review and agent text stay verbatim. With the per-request guard (section 3), every request stays under the 100,000-token long-prompt price tier. |
 | c | retrieved | chunks from an org-wide index (all four repos and chat): hybrid BM25 and bge-small-en-v1.5, fused by reciprocal rank, up to 7,000 characters. Each chunk shows date, repo, branch or channel, kind and author. The query is the submitted prompt + the previous assistant turn + `repo: <repo> branch: <branch>`, which is the payload a memory hook receives when a prompt is submitted. At the start of a session the previous assistant turn is empty. Injected once, with the prompt. |
-| d | distilled | notes distilled once per history session by `claude-haiku-5-5` with the fixed prompt in `smb/memory/distill.py` (at most 8 per session, dated), retrieved by the same method and query, up to 3,500 characters |
+| d | distilled | notes distilled once per history session by `claude-haiku-5-5` with the fixed prompt in `smb/memory/distill.py` (at most 8 per session, dated). The index holds those notes plus the team chat messages verbatim, because chat is already short and this keeps the chat-only lessons reachable in every memory condition. Retrieved by the same method and query, up to 3,500 characters. |
 | f | pull | nothing injected; a `search_memory(query)` tool over the same index as c (7,000 characters per call). The system prompt gains one sentence naming the tool. |
 | g | oracle | the exact current lesson notes for the task (`lessons.yaml`): the ceiling, and a check that the task is solvable |
 
@@ -86,11 +86,11 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - Reported with each condition's failure rate on S tasks (Wilson 95%) and the failure breakdown below.
 
 **Failure breakdown, from the labels and the test kinds**
-- **M, D and X tasks.** Only lessons with a memory source are counted.
+- **M and D tasks.** Only lessons with a memory source are counted.
   - *not retrieved*: some needed lesson is in no recalled item;
   - *retrieved, not applied*: every needed lesson was recalled, but a `lesson` test failed;
   - *other*.
-  - On X tasks, a passing `diag` means *followed the other repo's rule*.
+- **X tasks**, whose own rule lives only in the code. *followed the other repo's rule* (a `diag` test passed); *other*.
 - **What counts as recalled.**
   - b: the lesson's span is inside the injected block.
   - c and f: a recalled chunk carries a span (section 5).
@@ -154,7 +154,9 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
   - main: $12;
   - Sonnet: $3;
   - total: $17.50 of a $20 budget.
-- Each stage's meter starts from what that stage has already booked in the spend ledgers, so a resumed stage cannot exceed its cap.
+- Each stage's meter starts from what that stage has already booked in the spend ledgers. Stages run one process at a time, so a resumed stage stays within its cap.
+- A command runs only in its own stages (history and distillation: pilot for billing, history for the rest; eval: pilot, main or Sonnet).
+- Distillation goes through the same reservation and retry rules, and saves its notes after every session.
 - A stage stops at its cap. Episodes stopped by the cap are reported, not scored.
 
 **G4 (hand checks)**
@@ -167,8 +169,12 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - A grader or task defect found this way is fixed, and every condition is re-graded the same way, with a log in the run directory. The task is fixed, or excluded with the reason.
 
 **Leakage**
-- At freeze, no answer string (an oracle line or a hidden-test literal of 12+ characters that is not already in main) may appear in any chunk, note or raw block.
-- A string that is a false positive is allowed only through a reviewed list recorded as an amendment.
+- Answer strings are:
+  - oracle lines of 25+ characters that use an identifier main doesn't have (imports and comments skipped);
+  - hidden-test string literals of 12+ characters;
+  - in both cases, only strings not already present anywhere in main.
+- At freeze, no answer string may appear in any chunk, note or raw block.
+- A string that is a false positive is allowed only through a reviewed list recorded as an amendment; the list is part of the corpus hash.
 
 ## 7. Known limits
 

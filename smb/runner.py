@@ -24,7 +24,8 @@ FINAL_STOPS = {"finished", "no_finish", "call_limit", "context_limit", "wall_clo
 
 
 def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers: dict, run_dir: Path,
-                meter: Meter | None, limits: Limits | None = None, output_config: dict | None = None) -> dict:
+                meter: Meter | None, limits: Limits | None = None, output_config: dict | None = None,
+                corpus_sha256: str = "") -> dict:
     name = CONDITIONS[cond]
     ep_id = f"{task.id}__{cond}__e{epoch}"
     ep_dir = run_dir / "episodes" / ep_id
@@ -57,7 +58,7 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
         seen_patterns = set(recall.pattern_lessons) | {l for r in searched for l in r.pattern_lessons}
         result = {
             "episode": ep_id, "task": task.id, "repo": task.repo, "family": task.family, "condition": cond,
-            "condition_name": name, "epoch": epoch, "model": model, "stop": stop,
+            "condition_name": name, "epoch": epoch, "model": model, "corpus_sha256": corpus_sha256, "stop": stop,
             # PREREGISTRATION: context_limit, call_limit, wall_clock, no_finish and refusal count as fails
             "score": (grade["score"] if stop == "finished" else 0) if grade else None,
             "graded_score": grade["score"] if grade else None, "grade_status": grade["status"] if grade else None,

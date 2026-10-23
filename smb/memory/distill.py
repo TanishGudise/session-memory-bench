@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from smb.agent import _usage, metered_create
 from smb.memory.corpus import authored_spans, carries, history_specs, lessons
 from smb.memory.provider import render_session_raw
 from smb.transcript import read as read_transcript
@@ -32,13 +33,10 @@ def stub_notes(spec: dict) -> list[str]:
 def model_notes(client, model: str, spec: dict, transcript_text: str, meter=None) -> tuple[list[str], dict]:
     prompt = PROMPT.format(repo=spec["repo"], date=spec["date"], branch=spec["branch"], transcript=transcript_text)
     messages = [{"role": "user", "content": prompt}]
-    ticket = meter.reserve(model, "", messages, [], MAX_TOKENS) if meter else None
-    resp = client.messages.create(model=model, max_tokens=MAX_TOKENS, messages=messages, timeout=180)
-    u = resp.usage
-    usage = {"input": u.input_tokens, "output": u.output_tokens, "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
-             "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
-    if meter:
-        meter.settle(ticket, model, usage)
+    resp, cost = metered_create(client, meter, model, "", messages, [], MAX_TOKENS, timeout=180)
+    if resp is None:
+        raise SystemExit("distillation stopped: stage cap reached")
+    usage = {**_usage(resp), "cost": cost}
     text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
     notes = [] if text.upper() == "NONE" else [l.strip(" -•\t") for l in text.splitlines() if l.strip(" -•\t")]
     return notes[:8], usage

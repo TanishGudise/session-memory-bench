@@ -50,7 +50,8 @@ class Embedder:
             raise SystemExit("set SMB_RETRIEVAL_PYTHON and SMB_EMBED_MODEL for the embedding half of retrieval")
         cache = ROOT / ".cache"
         cache.mkdir(parents=True, exist_ok=True)
-        cmd = ["/usr/bin/sandbox-exec", "-p", sandbox.profile(cache),
+        reads = (Path(RETRIEVAL_PYTHON).parent.parent, Path(EMBED_MODEL), ROOT / "smb" / "memory")
+        cmd = ["/usr/bin/sandbox-exec", "-p", sandbox.profile(cache, reads),
                RETRIEVAL_PYTHON, "-I", str(ROOT / "smb/memory/embed_server.py"), EMBED_MODEL]
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                                      env={"PATH": "/usr/bin:/bin", "HOME": str(cache), "OMP_NUM_THREADS": "1"})

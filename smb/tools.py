@@ -155,8 +155,22 @@ class Workspace:
         return f"{note}exit code {res.code}\n{tail}"
 
     def call(self, name: str, args: dict) -> str:
+        """Agent mistakes (unknown tool, bad arguments, bad paths, unreadable files) raise ToolError. A failure to
+        start the sandboxed test run is the harness's and propagates."""
         fn = {"list_dir": self.list_dir, "read_file": self.read_file, "search_code": self.search_code,
               "write_file": self.write_file, "replace_in_file": self.replace_in_file, "run_tests": self.run_tests}.get(name)
         if fn is None:
             raise ToolError(f"unknown tool {name}")
-        return fn(**args)
+        if any(not isinstance(v, str) for v in args.values()):
+            raise ToolError("tool arguments must be strings")
+        if name == "run_tests":
+            try:
+                return fn(**args)
+            except TypeError as exc:
+                raise ToolError(f"bad arguments: {exc}") from None
+        try:
+            return fn(**args)
+        except TypeError as exc:
+            raise ToolError(f"bad arguments: {exc}") from None
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise ToolError(f"{type(exc).__name__}: {exc}") from None

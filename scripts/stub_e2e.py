@@ -21,7 +21,7 @@ from smb.history import run_session  # noqa: E402
 from smb.memory import corpus as corpus_mod  # noqa: E402
 from smb.memory.distill import stub_notes, write_notes  # noqa: E402
 from smb.memory.freeze import freeze, stub_labels  # noqa: E402
-from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, estimate_tokens, notes_as_chunks  # noqa: E402
+from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, distilled_index_chunks, estimate_tokens  # noqa: E402
 from smb.memory.retriever import Index  # noqa: E402
 from smb.meter import Meter  # noqa: E402
 from smb.paths import ROOT  # noqa: E402
@@ -50,7 +50,7 @@ def main() -> int:
     freeze(hist_dir, estimate_tokens)
     chunks = corpus_mod.load(hist_dir / "chunks.jsonl")
     idx = Index(chunks)
-    notes_idx = Index(notes_as_chunks(hist_dir / "notes.jsonl", hist_dir / "notes_labels.json"), embedder=idx.embedder)
+    notes_idx = Index(distilled_index_chunks(hist_dir), embedder=idx.embedder)
     raw = FrozenRaw(json.loads((hist_dir / "raw_blocks.json").read_text()))
     providers = {"none": NoMemory(), "raw": raw, "retrieved": Retrieved(idx),
                  "distilled": Retrieved(notes_idx, budget_chars=3500), "pull": Pull(idx)}

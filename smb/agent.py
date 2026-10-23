@@ -40,6 +40,37 @@ def _maybe_billed(exc: Exception) -> bool:
     return not (isinstance(status, int) and 400 <= status < 500)
 
 
+def metered_create(client, meter: Meter | None, model: str, reserve_system: str, messages: list, reserve_tools: list,
+                   max_tokens: int, **kwargs) -> tuple[object | None, float]:
+    """One model request with the spend rules: every attempt reserves its worst case first; an attempt that may
+    have been billed without returning usage is booked at that worst case; transient errors are retried up to
+    API_ATTEMPTS times. Returns (response, cost), or (None, cost) when the cap refuses a reservation."""
+    cost = 0.0
+    for attempt in range(API_ATTEMPTS):
+        ticket = None
+        if meter is not None:
+            try:
+                ticket = meter.reserve(model, reserve_system, messages, reserve_tools, max_tokens)
+            except CapReached:
+                return None, cost
+        try:
+            resp = client.messages.create(model=model, max_tokens=max_tokens, messages=messages, **kwargs)
+        except Exception as exc:
+            if ticket is not None:
+                if _maybe_billed(exc):
+                    cost += meter.settle_worst(ticket, model)
+                else:
+                    meter.release(ticket)
+            if not _transient(exc) or attempt == API_ATTEMPTS - 1:
+                raise
+            time.sleep(RETRY_SLEEP[min(attempt, len(RETRY_SLEEP) - 1)])
+            continue
+        if ticket is not None:
+            cost += meter.settle(ticket, model, _usage(resp))
+        return resp, cost
+    raise AssertionError("unreachable")
+
+
 @dataclass
 class Limits:
     max_calls: int = 30          # model calls per user turn
@@ -95,37 +126,18 @@ class Episode:
                 return "wall_clock"
             if self.estimate_prompt_tokens() > self.limits.prompt_guard:
                 return "context_limit"
-            kwargs = dict(model=self.model, max_tokens=self.limits.max_tokens,
-                          system=[{"type": "text", "text": self.system}], tools=self.tools, messages=self.messages,
-                          cache_control={"type": "ephemeral"}, timeout=self.limits.http_timeout)
-            if self.output_config:
-                kwargs["output_config"] = self.output_config
-            resp = None
-            for attempt in range(API_ATTEMPTS):
-                ticket = None
-                if self.meter is not None:
-                    try:
-                        ticket = self.meter.reserve(self.model, self.system, self.messages, self.tools, self.limits.max_tokens)
-                    except CapReached:
-                        return "cap"
-                try:
-                    resp = self.client.messages.create(**kwargs)
-                    break
-                except Exception as exc:
-                    if ticket is not None:
-                        if _maybe_billed(exc):
-                            self.cost += self.meter.settle_worst(ticket, self.model)
-                        else:
-                            self.meter.release(ticket)
-                    if not _transient(exc) or attempt == API_ATTEMPTS - 1:
-                        raise
-                    time.sleep(RETRY_SLEEP[min(attempt, len(RETRY_SLEEP) - 1)])
+            extra = {"output_config": self.output_config} if self.output_config else {}
+            resp, cost = metered_create(self.client, self.meter, self.model, self.system, self.messages, self.tools,
+                                            self.limits.max_tokens, system=[{"type": "text", "text": self.system}],
+                                            tools=self.tools, cache_control={"type": "ephemeral"},
+                                            timeout=self.limits.http_timeout, **extra)
+            if resp is None:
+                return "cap"
+            self.cost += cost
             turn_calls += 1
             self.calls += 1
             u = _usage(resp)
             self.usage.update(u)
-            if ticket is not None:
-                self.cost += self.meter.settle(ticket, self.model, u)
             self._last_input_total = u["input"] + u["cache_read"] + u["cache_write"] + u["output"]
             self._chars_since_call = 0
             blocks = [_block_dict(b) for b in resp.content]
@@ -164,14 +176,13 @@ class Episode:
                         self.summary = str(args.get("summary", ""))
                         out = "ok"
                     elif name == "search_memory" and self.memory_search is not None:
+                        # a failure here is the harness's (retriever), so it propagates and the episode is an error
                         out = self.memory_search(str(args.get("query", "")))
                         self.memory_queries.append({"query": str(args.get("query", "")), "call": self.calls})
                     else:
-                        out = self.ws.call(name, args)
+                        out = self.ws.call(name, args)  # argument and path mistakes come back as ToolError
                 except ToolError as exc:
                     out, is_error = f"error: {exc}", True
-                except Exception as exc:  # noqa: BLE001 - the agent's mistake (bad path, wrong type...), not a harness fault
-                    out, is_error = f"error: {type(exc).__name__}: {exc}", True
                 results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": out, **({"is_error": True} if is_error else {})})
             self._append({"role": "user", "content": results})
             self.transcript.add("user", results)

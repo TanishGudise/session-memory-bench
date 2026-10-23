@@ -14,23 +14,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-# Benchmark files sandboxed code must not read (hidden tests, solutions, lessons, memory, results, the key).
-_PRIVATE_DIRS = ("tasks", "history", "runs", "validation", ".work", ".cache")
-_PRIVATE_FILES = ("lessons.yaml", ".env", "PREREGISTRATION.md", "README.md", "MANIFEST.json", "FROZEN")
-
-
-def profile(write_root: Path) -> str:
-    from smb.paths import ROOT, WORK
+def profile(write_root: Path, extra_reads: tuple[Path, ...] = ()) -> str:
+    """No network; writes only inside write_root; no file data reads anywhere under the home directory (the
+    benchmark repo with its .git, other workspaces, other projects) or in the shared temp dirs, except write_root,
+    the project's venv and `extra_reads`."""
+    from smb.paths import ROOT
     w = str(write_root.resolve())
-    deny = " ".join([f'(subpath "{(ROOT / d).resolve()}")' for d in _PRIVATE_DIRS]
-                    + [f'(literal "{(ROOT / f).resolve()}")' for f in _PRIVATE_FILES]
-                    + [f'(subpath "{WORK.resolve()}")'])
+    deny = " ".join(f'(subpath "{d}")' for d in (str(Path.home().resolve()), "/private/tmp", "/private/var/folders"))
+    allow = " ".join(f'(subpath "{d}")' for d in (w, str((ROOT / ".venv").resolve()), *(str(Path(x).resolve()) for x in extra_reads)))
     return (
         "(version 1)\n(allow default)\n"
         "(deny network-outbound)\n(deny network-inbound)\n(deny network-bind)\n"
         '(allow network-outbound (remote unix-socket))\n'
         f"(deny file-read-data {deny})\n"
-        f'(allow file-read-data (subpath "{w}"))\n'
+        f"(allow file-read-data {allow})\n"
         '(deny file-write*)\n'
         f'(allow file-write* (subpath "{w}") (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr")'
         ' (literal "/dev/tty") (regex #"^/dev/fd/"))\n'
