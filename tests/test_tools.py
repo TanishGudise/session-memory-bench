@@ -60,3 +60,27 @@ def test_odd_inputs_are_tool_errors(ws, tmp_path):
         assert "pkg/locked.py" not in ws.files()
     finally:
         os.chmod(tmp_path / "pkg" / "locked.py", 0o644)
+
+
+def test_unreadable_dirs_inner_links_and_slow_regex(ws, tmp_path):
+    import time
+    d = tmp_path / "lockdir"
+    d.mkdir()
+    (d / "x.py").write_text("x")
+    os.chmod(d, 0o600)
+    try:
+        assert "pkg/a.py" in ws.files() and "lockdir/x.py" not in ws.files()
+        assert "pkg/a.py" in ws.list_dir(".")
+        assert "pkg/a.py:1" in ws.search_code("x = 1")
+    finally:
+        os.chmod(d, 0o755)
+    os.symlink(tmp_path / "pkg" / "a.py", tmp_path / "alias.py")
+    for name, args in [("read_file", {"path": "alias.py"}), ("write_file", {"path": "alias.py", "content": "y"})]:
+        with pytest.raises(ToolError):
+            ws.call(name, args)
+    assert (tmp_path / "pkg" / "a.py").read_text() == "x = 1\nx = 1\n"
+    (tmp_path / "pkg" / "long.py").write_text("a" * 40 + "!\n")
+    t0 = time.monotonic()
+    with pytest.raises(ToolError):
+        ws.call("search_code", {"pattern": r"(a+)+$"})
+    assert time.monotonic() - t0 < 30

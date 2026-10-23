@@ -57,8 +57,8 @@ Same model, system prompt, task prompt, tools and budgets in every condition; on
 - **Loop.** A minimal loop on the Messages API (`smb/agent.py`).
 - **Tools.** `list_dir`, `read_file`, `search_code`, `write_file`, `replace_in_file`, `run_tests` and `finish`, plus `search_memory` in f. No shell.
   - `run_tests` runs the visible suite or one path, sandboxed like the graders, with `TZ=America/Los_Angeles`.
-  - Agent mistakes (unknown tools, bad arguments, bad or non-regular paths, bad regular expressions, unreadable files) go back to the agent as error results. A failure of the harness itself, such as the retriever or the test sandbox failing to start, ends the episode as a harness error.
-  - The file tools run on the host, inside the workspace only, and never follow or list symbolic links.
+  - Agent mistakes go back to the agent as error results. That covers unknown tools, bad arguments, bad or non-regular paths, bad regular expressions, a search running longer than 10 seconds, and files or directories the agent's own code made unreadable (which are skipped). A failure of the harness itself, such as the retriever or the test sandbox failing to start, ends the episode as a harness error.
+  - The file tools run on the host, inside the workspace only, and never follow or list symbolic links, even ones that point inside the workspace.
 - **Per episode.**
   - At most 30 model calls, `max_tokens` 8,000, prompt caching on, and the model's default effort.
   - A 10-minute wall clock, checked between calls; each call times out after 180 seconds.
@@ -88,6 +88,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - Reported with each condition's failure rate on S tasks (Wilson 95%) and the failure breakdown below.
 
 **Failure breakdown, from the labels and the test kinds**
+- **Any task.** An episode that wasn't graded (the module didn't import, tampered, grader timeout) is reported as *not graded* with its status. One that didn't end with `finish` is reported as *unfinished* with its stop reason. The categories below apply to graded, finished failures.
 - **M and D tasks.** Only lessons with a memory source are counted.
   - *not retrieved*: some needed lesson is in no recalled item;
   - *retrieved, not applied*: every needed lesson was recalled, but a `lesson` test failed;
@@ -136,7 +137,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
 - Main and every history start state pass their visible suites under `TZ=UTC`.
 - History checks behave as listed in `scripts/validate.py`.
 - Memory-only lessons have no evidence-pattern match in main.
-- No answer string (defined under Leakage below) appears in any memory text we wrote.
+- No new oracle line of 25+ characters, generic or not, and no hidden-test string literal of 12+ characters appears in any memory text we wrote.
 - The stub end-to-end run is clean: the no-memory stub scores 0 on M and D, and the oracle stub passes every task.
 
 **G2 (pilot)**
@@ -156,7 +157,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
   - main: $12;
   - Sonnet: $3;
   - total: $17.50 of a $20 budget.
-- Each stage's meter starts from what that stage has already booked in the spend ledgers. A lock file allows one process per stage, so a resumed stage stays within its cap.
+- Each stage's meter starts from what that stage has already booked in the spend ledgers. A lock file allows one process per stage, so a resumed stage stays within its cap. A freeze holds the pilot and history locks, so no distillation writes notes while they are checked and hashed.
 - A command runs only in its own stages (history and distillation: pilot for billing, history for the rest; eval: pilot, main or Sonnet).
 - Distillation goes through the same reservation and retry rules, and saves its notes after every session.
 - A stage stops at its cap. Episodes stopped by the cap are reported, not scored.
@@ -175,7 +176,7 @@ Tests: exact McNemar on outcomes paired by (task, epoch), with Holm within each 
   - oracle lines of 25+ characters that use an identifier or a string literal main doesn't have (imports and comments skipped);
   - hidden-test string literals of 12+ characters;
   - in both cases, only strings not already present anywhere in main.
-- Oracle lines made only of names and literals that main already has are left out on purpose. A history agent that writes the same line is producing memory of a lesson, not copying an answer.
+- For the agents' transcripts and notes, oracle lines whose names (3+ characters) and string literals (3+ characters) all already appear in main are left out on purpose. A history agent that writes such a line is producing memory of a lesson, not copying an answer. Texts we wrote ourselves are checked against every new oracle line (G1).
 - At freeze, no answer string may appear in any chunk, note or raw block.
 - A string that is a false positive is allowed only through a reviewed list recorded as an amendment; the list is part of the corpus hash.
 

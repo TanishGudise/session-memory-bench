@@ -22,7 +22,7 @@ LITERAL = re.compile(r'"([^"\\\n]*)"|\'([^\'\\\n]*)\'')
 TS_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')  # one double-quoted literal at a time, escapes included
 
 
-def answer_strings() -> dict[str, set[str]]:
+def answer_strings(strict: bool = False) -> dict[str, set[str]]:
     """Per task: oracle lines that use an identifier main doesn't have, and hidden-test literals, minus anything
     already present anywhere in main (contents or file paths, any repo)."""
     mains = [main_state(r) for r in ("billing", "ingest", "inventory", "notify")]
@@ -42,7 +42,7 @@ def answer_strings() -> dict[str, set[str]]:
                 lits = [a or b for a, b in LITERAL.findall(s)]
                 new_literal = any(len(x) >= 3 and _norm(x) not in main_blob for x in lits)
                 if (len(s) >= MIN_LINE and s not in main_lines and not s.startswith(("import ", "from ", "#", "//"))
-                        and (set(IDENT.findall(s)) - main_idents or new_literal)):  # task-specific, not generic code
+                        and (strict or set(IDENT.findall(s)) - main_idents or new_literal)):  # task-specific, not generic code
                     added.add(s)
         literals = set()
         for rel, data in t.hidden_files().items():
@@ -57,10 +57,11 @@ def answer_strings() -> dict[str, set[str]]:
     return out
 
 
-def find_leaks(texts: list[str]) -> dict[str, list[str]]:
+def find_leaks(texts: list[str], strict: bool = False) -> dict[str, list[str]]:
+    """strict=True (texts the benchmark's author wrote) checks every new oracle line, generic or not."""
     blob = _norm("\n".join(texts))
     leaks = {}
-    for tid, strings in answer_strings().items():
+    for tid, strings in answer_strings(strict).items():
         hit = sorted(s for s in strings if _norm(s) in blob)
         if hit:
             leaks[tid] = hit

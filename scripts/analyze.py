@@ -65,6 +65,10 @@ def family_tests(rows, spec, fams):
 def breakdown(r):
     if r["score"] == 1 or r["score"] is None:
         return None
+    if r.get("grade_status") != "graded":  # never graded (module missing, tampered, timeout...): no lesson verdict
+        return f"not_graded:{r.get('grade_status')}"
+    if r["stop"] != "finished":
+        return f"unfinished:{r['stop']}"
     tests = r["tests"]
     lesson_fail = any(v != "pass" for n, v in tests.items() if "lesson" in n)
     diag = any(v == "pass" for v in r.get("diag", {}).values())

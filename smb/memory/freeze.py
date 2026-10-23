@@ -61,10 +61,12 @@ def freeze(corpus_dir: Path, count_tokens: Callable[[str], int], allowed_leaks: 
     missing = [sid for sid in specs if not (corpus_dir / sid / "session.json").exists()]
     if missing:
         raise SystemExit(f"history sessions not complete: {missing}")
-    notes = [json.loads(l) for l in (corpus_dir / "notes.jsonl").read_text().splitlines() if l.strip()]
+    notes_bytes = (corpus_dir / "notes.jsonl").read_bytes()  # read once: checked, hashed and snapshotted as is
+    labels_bytes = (corpus_dir / "notes_labels.json").read_bytes()
+    notes = [json.loads(l) for l in notes_bytes.decode().splitlines() if l.strip()]
     if {n["source"] for n in notes} - set(specs) or set(specs) - {n["source"] for n in notes} - _noteless(corpus_dir):
         raise SystemExit("notes.jsonl must hold the notes of exactly the frozen sessions (re-run distill for these repos)")
-    labels = json.loads((corpus_dir / "notes_labels.json").read_text())
+    labels = json.loads(labels_bytes)
     if not labels.get("reviewed") or set(labels["labels"]) != {n["id"] for n in notes}:
         raise SystemExit("notes_labels.json must be reviewed and cover exactly the notes in notes.jsonl")
     unknown = {l for ls in labels["labels"].values() for l in ls} - set(corpus_mod.lessons())
@@ -79,10 +81,14 @@ def freeze(corpus_dir: Path, count_tokens: Callable[[str], int], allowed_leaks: 
         for rel, h in old["files"].items():
             if "/" in rel and (not (corpus_dir / rel).exists() or hashlib.sha256((corpus_dir / rel).read_bytes()).hexdigest() != h):
                 problems.append(f"frozen session file changed: {rel}")
-        snap = corpus_dir / old["notes_snapshot"]
-        old_notes = {n["id"]: n for n in (json.loads(l) for l in snap.read_text().splitlines() if l.strip())}
+        snap_notes = (corpus_dir / old["notes_snapshot"]).read_bytes()
+        snap_labels = (corpus_dir / old["labels_snapshot"]).read_bytes()
+        if (hashlib.sha256(snap_notes).hexdigest() != old["files"]["notes.jsonl"]
+                or hashlib.sha256(snap_labels).hexdigest() != old["files"]["notes_labels.json"]):
+            raise SystemExit("the frozen notes snapshot doesn't match its manifest: refusing (pass --force and record an amendment)")
+        old_notes = {n["id"]: n for n in (json.loads(l) for l in snap_notes.decode().splitlines() if l.strip())}
         new_notes = {n["id"]: n for n in notes}
-        old_labels = json.loads((corpus_dir / old["labels_snapshot"]).read_text())["labels"]
+        old_labels = json.loads(snap_labels)["labels"]
         for nid, n in old_notes.items():
             if new_notes.get(nid) != n:
                 problems.append(f"frozen note changed or removed: {nid}")
@@ -108,21 +114,21 @@ def freeze(corpus_dir: Path, count_tokens: Callable[[str], int], allowed_leaks: 
     for sid in sorted(specs):
         for name in ("transcript.jsonl", "session.json"):
             files[f"{sid}/{name}"] = hashlib.sha256((corpus_dir / sid / name).read_bytes()).hexdigest()
-    pending = {"chunks.jsonl": tmp_chunks, "notes.jsonl": corpus_dir / "notes.jsonl",
-               "notes_labels.json": corpus_dir / "notes_labels.json", "raw_blocks.json": tmp_raw}
-    for name in FROZEN_FILES:
-        files[name] = hashlib.sha256(pending[name].read_bytes()).hexdigest()
+    files["chunks.jsonl"] = hashlib.sha256(tmp_chunks.read_bytes()).hexdigest()
+    files["notes.jsonl"] = hashlib.sha256(notes_bytes).hexdigest()
+    files["notes_labels.json"] = hashlib.sha256(labels_bytes).hexdigest()
+    files["raw_blocks.json"] = hashlib.sha256(tmp_raw.read_bytes()).hexdigest()
     sha = hashlib.sha256(json.dumps({"files": files, "allowed_leaks": sorted(allowed_leaks)}, sort_keys=True).encode()).hexdigest()
     notes_snap, labels_snap = f"frozen-{sha[:8]}-notes.jsonl", f"frozen-{sha[:8]}-labels.json"
-    (corpus_dir / notes_snap).write_bytes((corpus_dir / "notes.jsonl").read_bytes())
-    (corpus_dir / labels_snap).write_bytes((corpus_dir / "notes_labels.json").read_bytes())
+    (corpus_dir / notes_snap).write_bytes(notes_bytes)
+    (corpus_dir / labels_snap).write_bytes(labels_bytes)
     manifest = {"sha256": sha, "files": files, "repos": repos, "sessions": sorted(specs), "allowed_leaks": sorted(allowed_leaks),
                 "notes_snapshot": notes_snap, "labels_snapshot": labels_snap, "chunks": len(chunks), "notes": len(notes),
                 "raw": {r: {k: b[k] for k in ("tokens", "sessions_included", "sessions_skipped")} for r, b in raw.items()}}
     tmp_manifest = corpus_dir / "CORPUS_MANIFEST.json.new"
     tmp_manifest.write_text(json.dumps(manifest, indent=1))
-    if old is not None:
-        old_path.rename(corpus_dir / f"CORPUS_MANIFEST.{old['sha256'][:8]}.json")
+    if old is not None:  # keep a copy of the old manifest; the live one is swapped in a single step below
+        (corpus_dir / f"CORPUS_MANIFEST.{old['sha256'][:8]}.json").write_text(old_path.read_text())
     os.replace(tmp_chunks, corpus_dir / "chunks.jsonl")
     os.replace(tmp_raw, corpus_dir / "raw_blocks.json")
     os.replace(tmp_manifest, old_path)

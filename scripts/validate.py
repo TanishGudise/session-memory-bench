@@ -170,7 +170,7 @@ def leakage(errors: list) -> dict:
     (The frozen corpus, with the agents' own transcripts, is checked again at freeze-corpus.)"""
     texts = [s["ticket"] for s in history_specs().values()] + [r["text"] for s in history_specs().values() for r in s["review"]]
     texts += [m["text"] for m in chat_messages()]
-    leaks = find_leaks(texts)
+    leaks = find_leaks(texts, strict=True)
     for tid, hit in leaks.items():
         errors.append(f"{tid}: leaks into memory texts: {hit[:3]}")
     return leaks

@@ -105,8 +105,8 @@ python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 Paid stages read the API key from a gitignored `.env`.
 - All model traffic goes through a loopback proxy that allows only the API host, and the run process can open loopback connections only.
 - Agent code, graders and the embedder run sandboxed. They get no network, and they can't read file contents under the home directory (the benchmark, its git history, other workspaces) or the shared temp dirs. The exceptions are their own directory, the project's Python environment and, for the embedder, its interpreter, model and server script.
-- The agent's file tools never follow symbolic links.
-- Every grading run includes tests that must fail, so a patched assertion or runner is caught.
+- The agent's file tools never follow or list symbolic links, even ones inside the workspace.
+- Every grading run includes tests that must fail, so a blanket patch of an assertion helper, `pytest.raises` or the runner's assertions is caught. Other tampering is flagged by static patterns and checked by hand.
 - Every request, including every retry, reserves its worst-case cost against its stage's cap before it is sent. A request that may have been billed without returning usage is booked at that worst case.
 
 ## Limits

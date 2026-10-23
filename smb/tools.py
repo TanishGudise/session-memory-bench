@@ -3,9 +3,11 @@ run_tests executes agent-written code, so it runs sandboxed (no network, writes 
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +15,7 @@ from pathlib import Path
 from smb import sandbox
 
 MAX_RESULT = 8000
+SEARCH_TIMEOUT = 10
 DEV_TZ = "America/Los_Angeles"  # the developer laptop the agent "runs" on; CI and graders differ
 SKIP = {"__pycache__", ".pytest_cache", "node_modules", ".tmp", ".home"}
 
@@ -64,38 +67,55 @@ class Workspace:
         rel = (rel or ".").strip()
         if rel.startswith("/") or rel.startswith("~"):
             raise ToolError("paths are relative to the repository root")
+        if ".." in Path(rel).parts:
+            raise ToolError("path is outside the repository")
+        cur = self.root
+        for part in Path(rel).parts:  # check the path as given, before resolving, so no link is ever followed
+            if part == ".":
+                continue
+            cur = cur / part
+            if cur.is_symlink():
+                raise ToolError("symlinks are not supported")
         p = (self.root / rel).resolve()
         root = self.root.resolve()
         if p != root and root not in p.parents:
             raise ToolError("path is outside the repository")
-        cur = root
-        for part in p.relative_to(root).parts:
-            cur = cur / part
-            if cur.is_symlink():
-                raise ToolError("symlinks are not supported")
         if must_exist and not p.exists():
             raise ToolError(f"no such file or directory: {rel}")
         return p
 
     def _walk(self, base: Path):
-        """Regular files under base, never following or listing symlinks (agent code can create them)."""
-        root = self.root.resolve()
-        for p in sorted(base.rglob("*")):
-            rel = p.relative_to(self.root)
-            if set(rel.parts) & SKIP or any((self.root / Path(*rel.parts[: i + 1])).is_symlink() for i in range(len(rel.parts))):
-                continue
-            if root != p.resolve() and root not in p.resolve().parents:
-                continue
-            yield p, rel
+        """Files and directories under base, never following or listing symlinks (agent code can create them) and
+        skipping anything unreadable."""
+        out = []
+        for dirpath, dirnames, filenames in os.walk(base, followlinks=False):  # os.walk skips unreadable dirs
+            d = Path(dirpath)
+            keep = []
+            for name in sorted(dirnames):
+                try:
+                    if name not in SKIP and not (d / name).is_symlink():
+                        keep.append(name)
+                except OSError:
+                    continue
+            dirnames[:] = keep
+            for name in keep + sorted(filenames):
+                p = d / name
+                try:
+                    if p.is_symlink():
+                        continue
+                except OSError:
+                    continue
+                out.append((p, p.relative_to(self.root)))
+        return sorted(out, key=lambda x: x[1].as_posix())
 
     def files(self) -> dict[str, bytes]:
         out = {}
         for p, rel in self._walk(self.root):
-            if p.is_file() and stat.S_ISREG(p.lstat().st_mode):
-                try:
+            try:
+                if stat.S_ISREG(p.lstat().st_mode):
                     out[rel.as_posix()] = p.read_bytes()
-                except OSError:  # e.g. a file the agent's own code made unreadable
-                    continue
+            except OSError:  # e.g. a file the agent's own code made unreadable
+                continue
         return out
 
     # tools -----------------------------------------------------------------
@@ -105,7 +125,11 @@ class Workspace:
             raise ToolError(f"not a directory: {path}")
         entries = []
         for p, rel in self._walk(base):
-            entries.append(rel.as_posix() + ("/" if p.is_dir() else ""))
+            try:
+                is_dir = p.is_dir()
+            except OSError:
+                continue
+            entries.append(rel.as_posix() + ("/" if is_dir else ""))
             if len(entries) >= 200:
                 entries.append("[more entries not shown]")
                 break
@@ -128,16 +152,26 @@ class Workspace:
         except (re.error, OverflowError, RecursionError) as exc:
             raise ToolError(f"bad regular expression: {exc}")
         base = self._resolve(path)
-        hits = []
-        candidates = list(self._walk(base)) if base.is_dir() else [(base, base.relative_to(self.root))]
+        candidates = self._walk(base) if base.is_dir() else [(base, base.relative_to(self.root))]
+        files = []
         for p, rel in candidates:
-            if not p.is_file() or not stat.S_ISREG(p.lstat().st_mode) or set(rel.parts) & SKIP:
+            try:
+                if stat.S_ISREG(p.lstat().st_mode):
+                    files.append([str(p), rel.as_posix()])
+            except OSError:
                 continue
-            for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-                if rx.search(line):
-                    hits.append(f"{rel.as_posix()}:{i}: {line.strip()[:200]}")
-                    if len(hits) >= 60:
-                        return "\n".join(hits) + "\n[more matches not shown]"
+        # the regex runs in a child process with a deadline: a catastrophic pattern can't hang the episode
+        try:
+            r = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("search_worker.py"))],
+                               input=json.dumps({"pattern": pattern, "files": files}), capture_output=True, text=True,
+                               timeout=SEARCH_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise ToolError(f"search took longer than {SEARCH_TIMEOUT} s; use a simpler pattern")
+        if r.returncode != 0:
+            raise ToolError("search failed: " + (r.stderr.strip().splitlines() or ["unknown error"])[-1][:200])
+        hits = json.loads(r.stdout)
+        if len(hits) > 60:
+            return "\n".join(hits[:60]) + "\n[more matches not shown]"
         return "\n".join(hits) or "no matches"
 
     def write_file(self, path: str, content: str) -> str:

@@ -1,3 +1,4 @@
+import os
 import shutil
 import sys
 import time
@@ -74,8 +75,7 @@ def test_git_history_and_home_are_unreadable():
     own = WORK / "w" / "test-git-probe"
     own.mkdir(parents=True, exist_ok=True)
     try:
-        probe = ROOT / ".work" / f"home-probe-{own.name}.txt"  # a real file under $HOME, outside the workspace
-        probe.parent.mkdir(exist_ok=True)
+        probe = WORK / f"home-probe-{os.getpid()}.txt"  # a real file under $HOME, outside the benchmark and the workspace
         probe.write_text("secret")
         code = (
             "import subprocess, os\n"
@@ -92,4 +92,4 @@ def test_git_history_and_home_are_unreadable():
         assert git_line.split()[1] != "0" or git_line.split()[2] == "0", r.output
     finally:
         shutil.rmtree(own, ignore_errors=True)
-        (ROOT / '.work' / f'home-probe-{own.name}.txt').unlink(missing_ok=True)
+        (WORK / f'home-probe-{os.getpid()}.txt').unlink(missing_ok=True)

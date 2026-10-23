@@ -242,14 +242,17 @@ def main() -> int:
     if a.cmd in ("history", "distill") and ((a.stage == "pilot" and sorted(a.repos) != ["billing"])
                                             or (a.stage == "history" and "billing" in a.repos)):
         raise SystemExit("billing's history and distillation are the pilot stage; the other repos are the history stage")
-    lock = None
-    if a.cmd != "freeze-corpus":  # one process per stage, so a stage's meter sees everything that stage books
-        (RUNS / "locks").mkdir(parents=True, exist_ok=True)
-        lock = open(RUNS / "locks" / f"{a.stage}.lock", "w")
+    # one process per stage, so a stage's meter sees everything that stage books; a freeze holds the pilot and
+    # history locks too, so no distillation writes notes while they are checked and hashed
+    locks = []
+    (RUNS / "locks").mkdir(parents=True, exist_ok=True)
+    for stage in (("pilot", "history") if a.cmd == "freeze-corpus" else (a.stage,)):
+        fh = open(RUNS / "locks" / f"{stage}.lock", "w")
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SystemExit(f"another process is running stage {a.stage}")
+            raise SystemExit(f"another process is running stage {stage}")
+        locks.append(fh)
     s = Session(a.stub, RUNS / "logs")
     try:
         {"history": cmd_history, "distill": cmd_distill, "freeze-corpus": cmd_freeze_corpus, "eval": cmd_eval}[a.cmd](a, s)

@@ -30,7 +30,8 @@ SUSPICIOUS = re.compile(r"junit|_pytest|\bpytest\b|atexit|os\._exit|sys\.exit|ct
                         r"|process\.exit|node:test|node:assert|\bassert\b[^;\n]*\)\s*\.\w+\s*=|assert\.\w+\s*="
                         r"|defineProperty|prototype|process\.env|--test|reporter"
                         r"|assert/strict|[\"']assert[\"']|Object\.(assign|setPrototypeOf)|\btype\(\s*[\"']|__\w*\"\s*\+"
-                        r"|=\s*type\b|\btype\s*,|[\"']_[\"']\s*\*|Reflect\.|\bimport\(|\bexec\(|\beval\(|__import__|getattr\(")
+                        r"|=\s*type\b|\btype\s*,|[\"']_[\"']\s*\*|Reflect\.|\bimport\(|\bexec\(|\beval\(|__import__|getattr\("
+                        r"|importlib|__class__|\bchr\(|_NodeReporter|__subclasses__|__dict__|(?<![.\w])compile\(")
 TS_TEST = re.compile(r"""\btest\(\s*(["'`])((?:func|lesson|diag): (?:(?!\1).)+)\1""")
 TIMEOUT = 120
 
