@@ -116,7 +116,7 @@ def test_analysis_runs_on_a_small_result_set(tmp_path):
     rows = []
     for task, fam in (("billing-03", "M"), ("billing-06", "S-s")):
         for cond in ("a", "b", "c", "d", "f", "g"):
-            for e in (1, 2):
+            for e in range(1, 21):
                 rows.append({"episode": f"{task}__{cond}__e{e}", "task": task, "family": fam, "condition": cond, "epoch": e,
                              "stop": "finished", "score": int(cond != "a"), "grade_status": "graded",
                              "tests": {"test_lesson_x": "pass" if cond != "a" else "fail"}, "diag": {}, "lessons": [],
@@ -128,7 +128,9 @@ def test_analysis_runs_on_a_small_result_set(tmp_path):
                        cwd=Path(__file__).resolve().parents[1])
     assert r.returncode == 0, r.stderr[-1500:]
     out = json.loads((tmp_path / "analysis.json").read_text())
-    assert "random_10pct_seed0" in out["hand_check"] and out["family_A_benefit_M"]["A1"]["pairs"] == 2
+    assert "random_10pct_seed0" in out["hand_check"] and out["family_A_benefit_M"]["A1"]["pairs"] == 20
+    assert len(out["hand_check"]["S_tasks_a_vs_c_disagree"]) == 20
+    assert not [x for x in out["hand_check"]["random_10pct_seed0"] if x.startswith(("billing-06__a__", "billing-06__c__"))]
 
 
 def test_runner_and_history_refuse_an_over_budget_snapshot(tmp_path, monkeypatch):
@@ -147,3 +149,22 @@ def test_runner_and_history_refuse_an_over_budget_snapshot(tmp_path, monkeypatch
     assert rec["complete"] is False and "over budget" in rec["problem"]
     assert (tmp_path / "hist" / "billing-H1" / "session.partial.json").exists()
     assert not (tmp_path / "hist" / "billing-H1" / "session.json").exists()
+
+
+def test_history_with_ungraded_checks_posts_no_review_and_paid_survives(tmp_path, monkeypatch):
+    import argparse
+    import importlib
+    import sys
+    from smb import history
+    real = history.grade_workspace
+    monkeypatch.setattr(history, "grade_workspace", lambda *a, **k: {**real(*a, **k), "status": "timeout"})
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    paid = importlib.import_module("paid")
+    monkeypatch.setattr(paid, "RUNS", tmp_path)
+    args = argparse.Namespace(stub=True, corpus="c", stage="pilot", model="haiku", repos=["billing"])
+    paid.cmd_history(args, paid.Session(True, tmp_path / "logs"))  # stops at the first incomplete session, no crash
+    d = tmp_path / "history" / "c" / "billing-H1"
+    rec = json.loads((d / "session.partial.json").read_text())
+    assert rec["complete"] is False and "checks not graded: timeout" in rec["problem"]
+    assert "Review from" not in (d / "transcript.jsonl").read_text()
+    assert not (d / "session.json").exists()

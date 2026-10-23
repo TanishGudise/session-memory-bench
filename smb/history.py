@@ -95,8 +95,9 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
                 if checks["status"] not in ("graded", "collection_error"):
                     harness_problem = f"checks not graded: {checks['status']}"
         if harness_problem:  # never post review comments from a broken check run; keep the session out of the corpus
-            record = {"id": sid, "repo": spec["repo"], "stop_task": stop_task, "complete": False, "problem": harness_problem,
-                      "calls": ep.calls, "usage": dict(ep.usage), "cost": round(ep.cost, 6)}
+            record = {"id": sid, "repo": spec["repo"], "stop_task": stop_task, "stop_review": None, "checks_failed": [],
+                      "complete": False, "problem": harness_problem, "calls": ep.calls, "usage": dict(ep.usage),
+                      "cost": round(ep.cost, 6)}
             (sess_dir / "session.partial.json").write_text(json.dumps(record, indent=2))
             return record
         failed = {n for n, v in (checks or {}).get("tests", {}).items() if v != "pass"}

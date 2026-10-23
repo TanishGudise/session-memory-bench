@@ -176,7 +176,9 @@ def main() -> int:
                          and (t, e, "c") in by_key and by_key[(t, e, "c")]["score"] != r["score"]})
     flagged = [r["episode"] for r in rows if r.get("suspicious")]
     listed = set(flagged) | {r["episode"] for r in rows if r.get("grade_status") not in (None, "graded", "collection_error")}
-    listed |= set(s_disagree) | {r["episode"] for r in scored(rows) if r["condition"] == "a" and r["family"] == "M" and r["score"] == 1}
+    s_keys = set(s_disagree)
+    listed |= {r["episode"] for (t, e, c), r in by_key.items() if c in ("a", "c") and f"{t}__e{e}" in s_keys}
+    listed |= {r["episode"] for r in scored(rows) if r["condition"] == "a" and r["family"] == "M" and r["score"] == 1}
     listed |= {r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)}
     rest = sorted(r["episode"] for r in scored(rows) if r["episode"] not in listed)
     sample = sorted(random.Random(0).sample(rest, k=max(1, len(rest) // 10))) if rest else []
