@@ -44,6 +44,6 @@ No request was booked at its worst case (no timeouts or dropped connections).
 
 Per (task, epoch), all six conditions cost $0.0235 on the pilot (a 0.0026, b 0.0083, c 0.0032, d 0.0031, f 0.0038, g 0.0025).
 
-- Main, 32 tasks × 6 conditions × 3 epochs (576 episodes): about $2.3, or $3.4 with a 1.5× margin for the other repos and longer raw blocks. That is under the $12 stage cap, so the preregistered 3 epochs stand.
+- Main, 32 tasks × 6 conditions × 3 epochs (576 episodes): about $2.3, or $3.4 with a 1.5× margin for the other repos and longer raw blocks. That is under the $12 stage cap, so the preregistered 3 epochs stand. (Superseded by Amendment 1, 2026-10-23: the main run uses 5 epochs.)
 - History stage (the other 19 sessions plus their distillation): about $0.1 against its $1.00 cap.
 - Sonnet cross-check (8 S tasks, a/c pairs, then d): about $1.5 against its $3 cap.

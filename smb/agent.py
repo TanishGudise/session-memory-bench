@@ -29,8 +29,9 @@ DEADLINE_SLACK = 120.0    # a call is abandoned this long after its own HTTP tim
 
 
 class CallDeadline(Exception):
-    """The request neither returned nor failed by its hard deadline. A socket read that keeps receiving bytes never
-    hits the HTTP read timeout (a history session hung 50 minutes on one call), so the wait is bounded here."""
+    """The request neither returned nor failed by its hard deadline, counted in wall time. The HTTP timeout and a plain
+    join count monotonic time, which stops while the Mac sleeps: a history call sent just before a clamshell sleep was
+    still waiting 68 minutes later. After a wake past the deadline the call is abandoned and retried."""
 
 
 def _with_deadline(fn: Callable[[], object], seconds: float):
@@ -44,7 +45,9 @@ def _with_deadline(fn: Callable[[], object], seconds: float):
 
     t = threading.Thread(target=run, daemon=True)  # an abandoned call keeps only its own client's connection
     t.start()
-    t.join(seconds)
+    end = time.time() + seconds  # wall time, which keeps counting through a system sleep
+    while t.is_alive() and time.time() < end:
+        t.join(1.0)
     if t.is_alive():
         raise CallDeadline(f"no response after {seconds:.0f}s")
     if "exc" in box:
@@ -93,6 +96,10 @@ def metered_create(client, meter: Meter | None, model: str, reserve_system: str,
                 raise
             time.sleep(RETRY_SLEEP[min(attempt, len(RETRY_SLEEP) - 1)])
             continue
+        except BaseException:  # Ctrl-C while the request is out: it may still be billed, so the cap counts it
+            if ticket is not None:
+                meter.settle_worst(ticket, model)
+            raise
         if ticket is not None:
             cost += meter.settle(ticket, model, _usage(resp))
         return resp, cost

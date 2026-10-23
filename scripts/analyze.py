@@ -8,16 +8,20 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import yaml  # noqa: E402
+
 from smb.grade import SUSPICIOUS, TRIPWIRE  # noqa: E402
 from smb.history import attempt_lines  # noqa: E402
 from smb.memory.corpus import lessons  # noqa: E402
 from smb.memory.provider import CONDITIONS  # noqa: E402
+from smb.meter import PRICES, Meter  # noqa: E402
 from smb.stats import cluster_bootstrap_diff, holm, mcnemar_exact, wilson  # noqa: E402
 
 FAMS = ["M", "D", "S-u", "S-s", "X", "C"]
@@ -86,6 +90,20 @@ def code_seen(ep_dir: Path) -> str:
     return "\n".join(out)
 
 
+def real_cost(ep_dir: Path, model: str) -> float | None:
+    """The episode's cost priced from each answered call's usage in the transcript. Worst-case bookings (calls that
+    failed or were abandoned and may have been billed) are left out; they are reported separately."""
+    f = ep_dir / "transcript.jsonl"
+    if not f.exists() or model not in PRICES:
+        return None
+    total = 0.0
+    for line in f.read_text().splitlines():
+        rec = json.loads(line)
+        if rec.get("type") == "assistant" and (rec.get("meta") or {}).get("usage"):
+            total += Meter.cost(model, rec["meta"]["usage"])
+    return total
+
+
 def mem_need(r):
     return {l for l in r["lessons"] if _L[l]["source"] != "repo"}  # lessons memory could have supplied
 
@@ -132,6 +150,10 @@ def main() -> int:
             for line in cp.read_text().splitlines():
                 c = json.loads(line)
                 chunk_source[c["id"]] = c["source"]
+    raw_patterns = {}  # b recalls whole sessions, so its pattern hits come from the frozen raw block of each repo
+    if a.corpus and (Path(a.corpus) / "raw_blocks.json").exists():
+        for repo, blk in json.loads((Path(a.corpus) / "raw_blocks.json").read_text()).items():
+            raw_patterns[repo] = {lid for lid, l in _L.items() if any(re.search(pt, blk["block"], re.I) for pt in l.get("patterns", []))}
     res = {"episodes": len(rows), "excluded": [r["episode"] for r in rows if str(r["stop"]).startswith(EXCLUDED)]}
     if a.corpus:  # history attempts that were discarded and re-drawn (PREREGISTRATION: reported with their causes)
         att = {f.parent.name: [{"attempt": r.get("attempt"), "problem": r.get("problem")} for r in attempt_lines(f)]
@@ -165,10 +187,16 @@ def main() -> int:
             if not rs:
                 continue
             solved = sum(r["score"] for r in rs)
+            real = [real_cost(run / "episodes" / r["episode"], r.get("model", "")) for r in rs]
+            real_usd = sum(x for x in real if x is not None)
+            worst = [max(0.0, r["cost"] - x) if r["cost"] - x > 5e-6 else 0.0 for r, x in zip(rs, real) if x is not None]
             tok = [sum(r["usage"].get(k, 0) for k in ("input", "output", "cache_read", "cache_write")) for r in rs]
             cost[f"{c}/{label}"] = {
                 "episodes": len(rs), "solved": solved, "usd": round(sum(r["cost"] for r in rs), 4),
                 "usd_per_solved": round(sum(r["cost"] for r in rs) / solved, 5) if solved else None,
+                "usd_answered_calls": round(real_usd, 4),
+                "usd_per_solved_answered_calls": round(real_usd / solved, 5) if solved else None,
+                "worst_case_usd": round(sum(worst), 4), "episodes_with_worst_case": sum(1 for w in worst if w > 5e-6),  # result.json rounds cost to 6 places
                 "tokens_mean": round(sum(tok) / len(rs)), "calls_mean": round(sum(r["calls"] for r in rs) / len(rs), 2),
                 "reads_before_first_edit_mean": round(sum(r["reads_before_first_edit"] for r in rs) / len(rs), 2),
                 "seconds_mean": round(sum(r["seconds"] for r in rs) / len(rs), 1),
@@ -208,13 +236,17 @@ def main() -> int:
             strict = sorted(mem_need(r) - set(r["retrieved"]))
             if not strict:
                 continue
-            clear = sorted(set(strict) - set(r.get("retrieved_patterns", [])))
+            pats = raw_patterns.get(r["repo"], set()) if c == "b" else set(r.get("retrieved_patterns", []))
+            clear = sorted(set(strict) - pats)
             case = {"episode": r["episode"], "family": r["family"], "missing": strict, "missing_clear": clear, "score": r["score"]}
             fr = by_tec.get((r["task"], r["epoch"], "f"))
-            if c != "f" and fr is not None:
-                f_got = set(fr["retrieved"]) | set(fr.get("retrieved_patterns", []))
-                case["f_found"] = set(clear or strict) <= f_got
-                case["f_score"] = fr["score"]
+            if c != "f":
+                if fr is None:  # f's episode is missing or excluded: no verdict on recovery
+                    case["f_found"] = case["f_score"] = None
+                else:
+                    f_got = set(fr["retrieved"]) | set(fr.get("retrieved_patterns", []))
+                    case["f_found"] = set(clear or strict) <= f_got
+                    case["f_score"] = fr["score"]
             cases.append(case)
         clear_cases = [x for x in cases if x["missing_clear"]]
         entry = {"episodes": len(rs), "misses_strict": len(cases), "misses_clear": len(clear_cases),
@@ -222,13 +254,14 @@ def main() -> int:
         if c != "f":
             entry["f_found_clear_missing"] = sum(1 for x in clear_cases if x.get("f_found"))
             entry["f_solved_on_clear_miss"] = sum(1 for x in clear_cases if x.get("f_score") == 1)
+            entry["f_found_and_solved_on_clear_miss"] = sum(1 for x in clear_cases if x.get("f_found") and x.get("f_score") == 1)
+            entry["f_na_on_clear_miss"] = sum(1 for x in clear_cases if x.get("f_found") is None)
         entry["cases"] = cases
         misses[c] = entry
     res["retrieval_misses"] = misses
     # Amendment 1 (3): on S tasks, was the change visible in what the code tools returned?
     tasks_ev = {}
     for t in {r["task"] for r in rows if r["family"] in ("S-u", "S-s")}:
-        import yaml
         tasks_ev[t] = yaml.safe_load((ROOT / "tasks" / t / "task.yaml").read_text()).get("change_evidence", [])
     vis, vis_rows = {}, []
     for r in scored(rows):
@@ -295,13 +328,20 @@ def main() -> int:
             lines.append(f"- {name} {t['x']} vs {t['y']} ({t['alternative']}): {t['only_x_pass']} vs {t['only_y_pass']} discordant "
                          f"of {t['pairs']}, p={t['p']:.4f}, Holm {t['p_holm']:.4f}, diff {t['diff']:+.3f} "
                          f"[{t['diff_ci95'][0]:+.3f}, {t['diff_ci95'][1]:+.3f}]")
-    lines += ["", "$ per solved task (Amendment 1):", "", "| cond | all | M | S |", "|---|---|---|---|"]
+    lines += ["", "$ per solved task, priced from answered calls (Amendment 1); worst-case bookings beside it:", "",
+              "| cond | all | M | S | X | worst-case $ (episodes) |", "|---|---|---|---|---|---|"]
+
+    def cell(k):
+        v = res["cost"].get(k, {}).get("usd_per_solved_answered_calls")
+        return f"{v:.4f}" if v else "-"
     for c in CONDITIONS:
-        cell = lambda k: (f"{res['cost'][k]['usd_per_solved']:.4f}" if k in res["cost"] and res["cost"][k]["usd_per_solved"] else "-")  # noqa: E731
-        lines.append(f"| {c} | {cell(c + '/ALL')} | {cell(c + '/M')} | {cell(c + '/S')} |")
+        w = res["cost"].get(c + "/ALL", {})
+        lines.append(f"| {c} | {cell(c + '/ALL')} | {cell(c + '/M')} | {cell(c + '/S')} | {cell(c + '/X')} | "
+                     f"{w.get('worst_case_usd', 0):.4f} ({w.get('episodes_with_worst_case', 0)}) |")
     lines += ["", "Retrieval misses (Amendment 1): episodes where a needed memory lesson wasn't in recalled memory.", ""]
     for c, m in res["retrieval_misses"].items():
-        extra = (f"; on clear misses f recalled the lesson in {m['f_found_clear_missing']} and solved {m['f_solved_on_clear_miss']}"
+        extra = (f"; on those clear misses f recalled the lesson and passed in {m['f_found_and_solved_on_clear_miss']} "
+                 f"(recalled {m['f_found_clear_missing']}, passed {m['f_solved_on_clear_miss']}, no f episode {m['f_na_on_clear_miss']})"
                  if c != "f" else "")
         lines.append(f"- {c}: of {m['episodes']} episodes, {m['misses_strict']} missed the rule sentence and {m['misses_clear']} "
                      f"missed the lesson clearly (no pattern either); {m['solved_despite_clear_miss']} clear misses solved anyway{extra}")

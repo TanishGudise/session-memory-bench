@@ -109,7 +109,7 @@ python scripts/analyze.py runs/eval/main --corpus runs/history/run1
 python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 ```
 
-Paid stages read the API key from a gitignored `.env`.
+Paid stages read the API key from a gitignored `.env`. Run them on AC power with system sleep prevented (for example `caffeinate -s python scripts/paid.py ...`): sleep stops the clocks that time out requests.
 - All model traffic goes through a loopback proxy that allows only the API host, and the run process can open loopback connections only.
 - Agent code, graders and the embedder run sandboxed. They get no network, and they can't read file contents under the home directory (the benchmark, its git history, other workspaces) or the shared temp dirs. The exceptions are their own directory, the project's Python environment and, for the embedder, its interpreter, model and server script.
 - The agent's file tools never follow or list symbolic links, even ones inside the workspace.

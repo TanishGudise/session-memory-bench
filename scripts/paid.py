@@ -5,7 +5,7 @@
           eval --stage pilot --run pilot --corpus c1 --repos billing;
           eval --stage pilot --run pilot --corpus c1 --repos notify inventory ingest --families M --conditions a g
   then:   history --stage history --corpus c1 --repos notify inventory ingest; distill (same); label_notes.py c1;
-          freeze-corpus --corpus c1 (all repos; extends the pilot freeze); eval --stage main --run main --corpus c1 --epochs 3;
+          freeze-corpus --corpus c1 (all repos; extends the pilot freeze); eval --stage main --run main --corpus c1 --epochs 5 (Amendment 1);
           eval --stage sonnet --model sonnet --run sonnet --corpus c1 --families S-u S-s --conditions a c
   (add --stub to any of them for a $0 run with the stub models)
 

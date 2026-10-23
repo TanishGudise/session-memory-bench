@@ -80,6 +80,23 @@ def test_a_call_that_never_returns_is_abandoned_booked_and_retried(tmp_path, mon
     with pytest.raises(agent.CallDeadline):
         agent.metered_create(client, meter, "claude-haiku-5-5", "sys", [{"role": "user", "content": "hi"}], [], 100, timeout=0.1)
     stuck.set()
+    for t in [t for t in threading.enumerate() if t.daemon and t is not threading.current_thread()]:
+        t.join(5)  # the abandoned calls now complete; nothing reads their result
     lines = (tmp_path / "spend.jsonl").read_text().splitlines()
     assert len(lines) == agent.API_ATTEMPTS and all('"worst_case": true' in l for l in lines)  # each may have been billed
     assert meter.reserved == 0
+
+
+def test_an_interrupted_call_is_booked_at_its_worst_case(tmp_path):
+    import pytest
+
+    from smb import agent
+
+    def create(**kw):
+        raise KeyboardInterrupt()
+    client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    meter = Meter(cap_usd=1.0, ledger_path=tmp_path / "spend.jsonl", stage="t")
+    with pytest.raises(KeyboardInterrupt):
+        agent.metered_create(client, meter, "claude-haiku-5-5", "sys", [{"role": "user", "content": "hi"}], [], 100, timeout=5)
+    lines = (tmp_path / "spend.jsonl").read_text().splitlines()
+    assert len(lines) == 1 and '"worst_case": true' in lines[0] and meter.reserved == 0
