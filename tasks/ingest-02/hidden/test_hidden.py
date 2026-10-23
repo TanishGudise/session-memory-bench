@@ -27,6 +27,14 @@ def test_lesson_resend_with_new_export_time():
     assert sorted(r["external_id"] for r in wh.rows) == ["P-1", "P-2", "P-3"]
 
 
+def test_lesson_identity_is_source_and_external_id():
+    wh = Warehouse()
+    load(wh, ParseResult(records=[_rec("pinewood", "P-1", qty=1)]))
+    # the resend carries the same order with a corrected quantity: still the same row
+    assert load(wh, ParseResult(records=[_rec("pinewood", "P-1", qty=2, exported="2026-09-01T03:15:00Z")])) == 0
+    assert len(wh.rows) == 1
+
+
 def test_lesson_same_id_from_different_partners():
     wh = Warehouse()
     assert load(wh, ParseResult(records=[_rec("pinewood", "1001")])) == 1

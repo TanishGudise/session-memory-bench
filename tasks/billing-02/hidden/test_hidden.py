@@ -1,3 +1,5 @@
+import os
+import time
 from datetime import date, datetime, timedelta, timezone
 
 from billing.settlement import CUTOFF_HOUR_UTC, batch_for, cutoff_utc, settlement_report
@@ -30,3 +32,9 @@ def test_lesson_batch_boundaries_unchanged():
     assert batch_for(datetime(2026, 3, 2, 17, 0, tzinfo=UTC)) == date(2026, 3, 3)
     assert batch_for(datetime(2026, 3, 2, 8, 59, tzinfo=PST)) == date(2026, 3, 2)   # 16:59 UTC
     assert batch_for(datetime(2026, 3, 2, 9, 0, tzinfo=PST)) == date(2026, 3, 3)    # 17:00 UTC
+
+
+def test_lesson_time_zone_left_alone():
+    # graders run on a developer-style TZ; the fix must not paper over the flaky test by changing it
+    assert os.environ.get("TZ") == "America/Los_Angeles"
+    assert time.strftime("%Z", time.localtime(1772467200)) in ("PST", "PDT")

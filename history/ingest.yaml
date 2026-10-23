@@ -69,7 +69,7 @@ sessions:
       - when: always
         lessons: [ingest.dmy-dates, ingest.registry-quarantine]
         text: |
-          US partners send MM/DD/YYYY, which is why parse_us_date is explicit about it. Every non-US partner sends DD/MM/YYYY, and we never use a fuzzy or automatic date parser (the 01/02 mix-up in May). And as with every feed: register it in FEEDS and quarantine bad rows with a reason instead of raising.
+          US partners send MM/DD/YYYY, which is why parse_us_date is explicit about it. Every non-US partner (today that's Kestrel and Aldene) writes slash dates day first, DD/MM/YYYY, and we never use a fuzzy or automatic date parser (the 01/02 mix-up in May). And as with every feed: register it in FEEDS and quarantine bad rows with a reason instead of raising.
       - when: always
         lessons: [ingest.sku-field]
         text: |

@@ -32,7 +32,8 @@ def test_lesson_no_marketing_sms_at_night_local_time():
 
 def test_lesson_quiet_hours_boundaries():
     la = [_u("la", 1, "America/Los_Angeles")]
-    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(15, 0)) == ["la"]    # 08:00 local
-    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(14, 59)) == []       # 07:59 local
+    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(16, 0)) == ["la"]    # 09:00 local
+    assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(15, 59)) == []       # 08:59 local
     sh = [_u("sh", 2, "Asia/Shanghai")]
-    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 59)) == ["sh"]   # 20:59 local
+    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(11, 59)) == ["sh"]   # 19:59 local
+    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 30)) == []       # 20:30 local

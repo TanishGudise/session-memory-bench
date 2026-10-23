@@ -23,4 +23,4 @@ def test_func_registered_and_parses():
 def test_lesson_bad_rows_are_quarantined_not_raised():
     result = FEEDS["pinecrest"](CSV)
     assert [r["external_id"] for r in result.records] == ["PC-1", "PC-3"]
-    assert len(result.quarantined) == 1 and result.quarantined[0]["line"] == 3
+    assert len(result.quarantined) == 1

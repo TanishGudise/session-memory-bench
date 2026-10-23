@@ -70,10 +70,14 @@ def breakdown(r):
     diag = any(v == "pass" for v in r.get("diag", {}).values())
     need = {l for l in r["lessons"] if _L[l]["source"] != "repo"}  # lessons memory could have supplied
     got = set(r["retrieved"])
-    if r["family"] in ("S-u", "S-s"):
+    if r["family"] == "S-u":  # memory never holds the current rule here; what matters is whether the old one was recalled
         if diag:
             return "followed_old_rule"
-        return "current_recalled_not_applied" if need <= got and lesson_fail else "other"
+        return "old_rule_recalled_not_followed_other" if set(r["stale_lessons"]) & got else "other"
+    if r["family"] == "S-s":
+        if diag:
+            return "followed_old_rule"
+        return "current_recalled_not_applied" if need and need <= got and lesson_fail else "other"
     if r["family"] == "X" and diag:
         return "followed_other_repo_rule"
     if not need <= got:

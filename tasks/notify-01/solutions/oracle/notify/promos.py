@@ -7,7 +7,7 @@ from notify.models import User
 from notify.providers import FakeSMSProvider
 from notify.sms import send_sms
 
-QUIET_FROM, QUIET_UNTIL = 21, 8  # no marketing SMS 21:00-08:00 in the recipient's time zone
+QUIET_FROM, QUIET_UNTIL = 20, 9  # no marketing SMS 20:00-09:00 in the recipient's time zone
 
 
 def send_promo_sms(provider: FakeSMSProvider, users: list[User], text: str, now: datetime) -> list[str]:

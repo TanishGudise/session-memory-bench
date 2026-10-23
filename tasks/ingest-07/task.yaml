@@ -4,7 +4,7 @@ family: S-u
 lessons: [ingest.item-code]
 stale_lessons: [ingest.sku-field]
 author: Ruth
-branch: ruth/juniper-feed
+branch: ruth/quillon-feed
 prompt: |
-  Add a feed for Juniper's orders in ingest/feeds/juniper.py with `parse(text)`, registered as "juniper". CSV columns: id,product,quantity,price,date (ISO date); `product` is the product code.
+  Add a feed for Quillon's orders in ingest/feeds/quillon.py with `parse(text)`, registered as "quillon". CSV columns: id,product,quantity,price,date (ISO date); `product` is the product code.
 editable: ["ingest/**", "tests/**"]

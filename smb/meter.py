@@ -7,10 +7,11 @@ refused and the episode stops (flagged, not scored)."""
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 
-# $ per million tokens (claude-api skill model table, cached 2026-10-06). Cache writes 1.25x input (5-minute TTL),
+# $ per million tokens, Anthropic list prices as of 2026-10. Cache writes 1.25x input (5-minute TTL),
 # cache reads 0.1x input. Haiku 5.5 prompts above 100k tokens are billed at $0.50 / $2.50.
 PRICES = {
     "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_read": 0.01, "cache_write": 0.125, "long": 5.0},
@@ -25,9 +26,10 @@ class CapReached(RuntimeError):
 
 
 class Meter:
-    def __init__(self, cap_usd: float, ledger_path: Path | None = None, spent: float = 0.0):
+    def __init__(self, cap_usd: float, ledger_path: Path | None = None, spent: float = 0.0, stage: str = ""):
         self.cap = cap_usd
         self.spent = spent
+        self.stage = stage
         self.reserved = 0.0
         self.lock = threading.Lock()
         self.path = ledger_path
@@ -61,12 +63,19 @@ class Meter:
                        + usage.get("cache_read", 0) * p["cache_read"] + usage.get("cache_write", 0) * p["cache_write"]) / 1e6
 
     def settle(self, ticket: dict, model: str, usage: dict) -> float:
-        c = self.cost(model, usage)
+        return self._book(ticket, model, self.cost(model, usage), usage)
+
+    def settle_worst(self, ticket: dict, model: str) -> float:
+        """A call that may have been billed without returning usage (timeout, dropped connection) counts in full."""
+        return self._book(ticket, model, ticket["amount"], {"worst_case": True})
+
+    def _book(self, ticket: dict, model: str, c: float, usage: dict) -> float:
         with self.lock:
             self.reserved -= ticket["amount"]
             self.spent += c
             if self.path:
                 with open(self.path, "a") as f:
-                    f.write(json.dumps({"model": model, "usage": usage, "cost": c, "spent": self.spent}) + "\n")
+                    f.write(json.dumps({"stage": self.stage, "model": model, "usage": usage, "cost": c, "spent": self.spent}) + "\n")
                     f.flush()
+                    os.fsync(f.fileno())
         return c

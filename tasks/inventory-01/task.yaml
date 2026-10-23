@@ -1,7 +1,7 @@
 id: inventory-01
 repo: inventory
 family: M
-lessons: [inventory.hold-expiry-15m]
+lessons: [inventory.hold-expiry]
 author: Kenji
 branch: kenji/available-to-promise
 prompt: |

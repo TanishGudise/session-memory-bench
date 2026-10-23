@@ -21,6 +21,23 @@ SYSTEM = (
 SYSTEM_PULL = " You can search your team's memory of earlier agent sessions, PR reviews and chat with search_memory."
 NUDGE = "Continue with the task, or call finish if you're done."
 CUT_OFF = "Your last reply was cut off. Continue, keeping each reply shorter."
+CUT_OFF_TOOL = "error: your reply was cut off before this tool call was complete, so it was not run. Try again with a shorter call."
+API_ATTEMPTS = 3          # the SDK client is built with max_retries=0; the loop retries, reserving again each time
+RETRY_SLEEP = (2.0, 8.0)
+
+
+def _transient(exc: Exception) -> bool:
+    """Errors worth retrying: connection problems, timeouts, rate limits, server errors."""
+    name = type(exc).__name__
+    status = getattr(exc, "status_code", None)
+    return name in ("APIConnectionError", "APITimeoutError", "RateLimitError", "InternalServerError", "OverloadedError") \
+        or (isinstance(status, int) and (status == 429 or status >= 500))
+
+
+def _maybe_billed(exc: Exception) -> bool:
+    """A request that may have been processed (timeout, dropped connection, server error) counts at its worst case."""
+    status = getattr(exc, "status_code", None)
+    return not (isinstance(status, int) and 400 <= status < 500)
 
 
 @dataclass
@@ -83,18 +100,26 @@ class Episode:
                           cache_control={"type": "ephemeral"}, timeout=self.limits.http_timeout)
             if self.output_config:
                 kwargs["output_config"] = self.output_config
-            ticket = None
-            if self.meter is not None:
+            resp = None
+            for attempt in range(API_ATTEMPTS):
+                ticket = None
+                if self.meter is not None:
+                    try:
+                        ticket = self.meter.reserve(self.model, self.system, self.messages, self.tools, self.limits.max_tokens)
+                    except CapReached:
+                        return "cap"
                 try:
-                    ticket = self.meter.reserve(self.model, self.system, self.messages, self.tools, self.limits.max_tokens)
-                except CapReached:
-                    return "cap"
-            try:
-                resp = self.client.messages.create(**kwargs)
-            except Exception:
-                if ticket is not None:
-                    self.meter.release(ticket)
-                raise
+                    resp = self.client.messages.create(**kwargs)
+                    break
+                except Exception as exc:
+                    if ticket is not None:
+                        if _maybe_billed(exc):
+                            self.cost += self.meter.settle_worst(ticket, self.model)
+                        else:
+                            self.meter.release(ticket)
+                    if not _transient(exc) or attempt == API_ATTEMPTS - 1:
+                        raise
+                    time.sleep(RETRY_SLEEP[min(attempt, len(RETRY_SLEEP) - 1)])
             turn_calls += 1
             self.calls += 1
             u = _usage(resp)
@@ -118,11 +143,22 @@ class Episode:
                 self.transcript.add("user", note, meta={"harness": True})
                 continue
             results, finished = [], False
+            truncated = resp.stop_reason == "max_tokens"
             for tu in tool_uses:
                 name, args = tu["name"], tu.get("input") or {}
                 self.tool_counts[name] += 1
                 is_error = False
+                if truncated:  # the last tool call may be incomplete: run none of this reply's calls
+                    results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": CUT_OFF_TOOL, "is_error": True})
+                    continue
+                if self.first_edit_call is None:
+                    if name in ("write_file", "replace_in_file"):
+                        self.first_edit_call = self.calls
+                    elif name in ("read_file", "search_code", "list_dir", "search_memory"):
+                        self.reads_before_first_edit += 1
                 try:
+                    if not isinstance(args, dict):
+                        raise ToolError("tool input must be an object")
                     if name == "finish":
                         finished = True
                         self.summary = str(args.get("summary", ""))
@@ -131,13 +167,11 @@ class Episode:
                         out = self.memory_search(str(args.get("query", "")))
                         self.memory_queries.append({"query": str(args.get("query", "")), "call": self.calls})
                     else:
-                        if name in ("write_file", "replace_in_file") and self.first_edit_call is None:
-                            self.first_edit_call = self.calls
-                        elif name in ("read_file", "search_code", "list_dir", "search_memory") and self.first_edit_call is None:
-                            self.reads_before_first_edit += 1
                         out = self.ws.call(name, args)
-                except (ToolError, TypeError) as exc:
+                except ToolError as exc:
                     out, is_error = f"error: {exc}", True
+                except Exception as exc:  # noqa: BLE001 - the agent's mistake (bad path, wrong type...), not a harness fault
+                    out, is_error = f"error: {type(exc).__name__}: {exc}", True
                 results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": out, **({"is_error": True} if is_error else {})})
             self._append({"role": "user", "content": results})
             self.transcript.add("user", results)

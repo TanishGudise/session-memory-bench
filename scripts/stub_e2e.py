@@ -20,7 +20,8 @@ from smb import netguard  # noqa: E402
 from smb.history import run_session  # noqa: E402
 from smb.memory import corpus as corpus_mod  # noqa: E402
 from smb.memory.distill import stub_notes, write_notes  # noqa: E402
-from smb.memory.provider import CONDITIONS, NoMemory, Pull, Raw, Retrieved, estimate_tokens, notes_as_chunks  # noqa: E402
+from smb.memory.freeze import freeze, stub_labels  # noqa: E402
+from smb.memory.provider import CONDITIONS, FrozenRaw, NoMemory, Pull, Retrieved, estimate_tokens, notes_as_chunks  # noqa: E402
 from smb.memory.retriever import Index  # noqa: E402
 from smb.meter import Meter  # noqa: E402
 from smb.paths import ROOT  # noqa: E402
@@ -44,12 +45,14 @@ def main() -> int:
     for sid, spec in sorted(specs.items(), key=lambda kv: (str(kv[1]["date"]), kv[0])):
         rec = run_session(sid, StubClient(HistoryStub({**spec, "id": sid})), "stub", hist_dir, meter=meter)
         assert rec["stop_task"] in ("finished", "no_finish") and rec["stop_review"] == "finished", rec
-    chunks = corpus_mod.build(hist_dir)
-    corpus_mod.save(chunks, hist_dir / "chunks.jsonl")
     write_notes(hist_dir, {sid: stub_notes(spec) for sid, spec in specs.items()})
+    stub_labels(hist_dir)
+    freeze(hist_dir, estimate_tokens)
+    chunks = corpus_mod.load(hist_dir / "chunks.jsonl")
     idx = Index(chunks)
-    notes_idx = Index(notes_as_chunks(hist_dir / "notes.jsonl"), embedder=idx.embedder)
-    providers = {"none": NoMemory(), "raw": Raw(hist_dir, estimate_tokens), "retrieved": Retrieved(idx),
+    notes_idx = Index(notes_as_chunks(hist_dir / "notes.jsonl", hist_dir / "notes_labels.json"), embedder=idx.embedder)
+    raw = FrozenRaw(json.loads((hist_dir / "raw_blocks.json").read_text()))
+    providers = {"none": NoMemory(), "raw": raw, "retrieved": Retrieved(idx),
                  "distilled": Retrieved(notes_idx, budget_chars=3500), "pull": Pull(idx)}
     run_dir = out / "eval"
     run_dir.mkdir(parents=True)

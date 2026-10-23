@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from billing.db import Store
 from billing.gateway import FakeGateway
 from billing.models import Customer, Invoice, Line
@@ -31,6 +33,15 @@ def test_lesson_timeout_after_gateway_processed_charges_once():
     inv = s.get_invoice("inv_1")
     assert [(l.description, l.cents) for l in inv.lines] == [("Plan", 5000), ("Late fee", 1500)]
     assert s.payments("inv_1") == [{"cents": 1500, "charge_id": charge_id}]
+
+
+def test_lesson_repeated_call_after_failure_charges_once():
+    s, gw = _setup()
+    gw.timeout_after_commit = 3
+    with pytest.raises(Exception):
+        charge_late_fee(s, gw, "inv_1", 1500)
+    charge_id = charge_late_fee(s, gw, "inv_1", 1500)  # the job runs again
+    assert list(gw.charges) == [charge_id]
 
 
 def test_lesson_two_timeouts_still_one_charge():

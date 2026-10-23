@@ -15,22 +15,22 @@ sessions:
         text: |
           Use stock.get(db, sku) whenever you need a stock number; it's our one accessor for stock levels.
       - when: always
-        lessons: [inventory.hold-expiry-15m]
+        lessons: [inventory.hold-expiry]
         text: |
-          Ops decided holds expire after 15 minutes (the 60-minute holds gave us phantom out-of-stocks last quarter). Anything that computes availability has to ignore holds older than 15 minutes.
+          Ops decided holds expire after 25 minutes (the 60-minute holds gave us phantom out-of-stocks last quarter). Anything that computes availability has to ignore holds older than 25 minutes.
   - id: inventory-H2
     date: 2026-08-10
     author: Kenji
-    branch: kenji/brightline-stock-low
+    branch: kenji/bramblecote-stock-low
     outcome: closed
     ticket: |
-      Ops says Brightline stock looks about 6x too low after Monday's import with scripts/import_brightline.ts. Please investigate what went wrong.
+      Ops says Bramblecote stock looks about 6x too low after Monday's import with scripts/import_bramblecote.ts. Please investigate what went wrong.
     ticket_lessons: []
     review:
       - when: always
-        lessons: [inventory.brightline-cases]
+        lessons: [inventory.bramblecote-cases]
         text: |
-          Good find. Right: Brightline's ASN quantities are cases of 6 units, not units. The import script was a one-off and we're deleting it; ops already corrected the counts by hand. Keep it in mind for when we build proper Brightline receiving: multiply their quantities by 6.
+          Good find. Right: Bramblecote's ASN quantities are cases of 6 units, not units. The import script was a one-off and we're deleting it; ops already corrected the counts by hand. Keep it in mind for when we build proper Bramblecote receiving: multiply their quantities by 6.
   - id: inventory-H3
     date: 2026-08-12
     author: Mei

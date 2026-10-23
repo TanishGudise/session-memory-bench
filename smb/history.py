@@ -74,7 +74,7 @@ def review_message(spec: dict, failed_checks: set[str]) -> tuple[str, list[dict]
 def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None = None, limits: Limits | None = None) -> dict:
     spec = history_specs()[sid]
     task = history_task(sid)
-    ws_dir = WORK / "history" / f"{sid}-{uuid.uuid4().hex[:8]}"
+    ws_dir = WORK / "h" / uuid.uuid4().hex[:12] / spec["repo"]
     write_tree(task.base_state(), ws_dir)
     ws = Workspace(ws_dir, task.lang, pid_dir=WORK / "pids")
     sess_dir = out_dir / sid
@@ -97,7 +97,11 @@ def run_session(sid: str, client, model: str, out_dir: Path, meter: Meter | None
             "calls": ep.calls, "usage": dict(ep.usage), "cost": round(ep.cost, 6), "tool_counts": dict(ep.tool_counts),
             "edited": sorted(set(ws.edits)),
         }
-        (sess_dir / "session.json").write_text(json.dumps(record, indent=2))
+        final = {"finished", "no_finish", "call_limit", "context_limit", "wall_clock", "refusal"}
+        complete = stop_task in final and stop_review in final
+        record["complete"] = complete
+        # an incomplete session (spend cap, API error) is never frozen into the corpus; a resume runs it again
+        (sess_dir / ("session.json" if complete else "session.partial.json")).write_text(json.dumps(record, indent=2))
         return record
     finally:
-        shutil.rmtree(ws_dir, ignore_errors=True)
+        shutil.rmtree(ws_dir.parent, ignore_errors=True)

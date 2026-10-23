@@ -11,19 +11,19 @@ The design, metrics and stop rules were registered before any model call: [PRERE
 
 ## How it works
 
-1. **A small organisation with a past.** Four repositories (`billing`, `notify`, `ingest` in Python; `inventory` in TypeScript run directly by Node) evolve through dated steps ([repos/](repos)).
+1. **A small organisation with a past.** Four small repositories (roughly 280–620 lines each, tests included) evolve through dated steps ([repos/](repos)). `billing`, `notify` and `ingest` are Python; `inventory` is TypeScript run directly by Node.
 2. **Earlier sessions.** 26 earlier tasks ([history/](history)) are worked by the same agent, then get a scripted PR review and one revision round. Lessons enter memory the way they do at a company:
-   - an incident ticket ("the gateway timed out after it had already captured the charge");
-   - a review comment ("we never rename a column in one migration");
-   - a closed PR, an investigation that ended in "that's the known flake";
-   - a chat message ("RNO is a returns-only location").
+   - an incident ticket, such as a gateway that timed out after it had already captured the charge;
+   - a review comment, such as never renaming a column in one migration;
+   - a closed PR, or an investigation that ended in "it's the known flake";
+   - a chat message, such as a warehouse being returns-only.
 
-   Their transcripts, plus team chat, are the memory corpus.
+   Their transcripts, plus team chat, are the memory corpus. It is frozen and hashed before any evaluation episode.
 3. **Later tasks.** 32 tasks ([tasks/](tasks)), phrased the way a teammate asks:
 
    | family | n | what it tests |
    |---|---|---|
-   | M, memory-only | 14 | the rule exists only in earlier sessions, reviews or chat (checked: no trace in the code) |
+   | M, memory-only | 14 | the rule is stated only in earlier sessions, reviews or chat (checked: no line of the code matches its evidence patterns) |
    | D, discoverable | 4 | the code already shows the convention; memory can only save exploration |
    | S-u, stale | 4 | memory holds an old rule; a later change nobody recorded in a session replaced it, and the code shows the new one |
    | S-s, superseded | 4 | memory holds the old rule and the later session that changed it |
@@ -41,7 +41,9 @@ The design, metrics and stop rules were registered before any model call: [PRERE
    | f | pull | nothing injected; the agent can call `search_memory` |
    | g | oracle | the exact lesson, the ceiling |
 
-5. **Grading.** Hidden tests tagged `func` (the feature works), `lesson` (it follows the team's rule) and `diag` (diagnostics such as "followed the old rule", not scored). Every failure is classified exactly, from the labels and the test kinds: *not retrieved*, *retrieved but not applied*, *followed the old rule*, *followed the other repo's rule*, or *other*.
+5. **Grading.** Hidden tests tagged `func` (the feature works), `lesson` (it follows the team's rule) and `diag` (diagnostics such as "followed the old rule", not scored). Each failure is classified from the lesson labels and the test kinds: *not retrieved*, *retrieved but not applied*, *followed the old rule*, *followed the other repo's rule*, or *other*.
+   - A chunk carries a lesson when it contains the sentence that states the rule.
+   - Distilled notes carry the lessons a person assigned to them before the run.
 
 ## Results
 
@@ -50,13 +52,16 @@ Not run yet. The paid stages are pilot, history, main run and a Sonnet check, ca
 ## Validation ($0)
 
 `python scripts/validate.py` (report in [validation/report.json](validation/report.json)) checks:
-- every task's solution matrix, identical over 5 repeats under 8 concurrent graders: the oracle passes; doing nothing, ignoring the lesson, following the old rule and following the other repo's rule all fail, and each failure trips the matching diagnostic;
+- every task's solution matrix, identical over 5 repeats under concurrent graders:
+  - the oracle passes;
+  - doing nothing, ignoring the lesson, following the old rule and following the other repo's rule all fail;
+  - the last two also trip their diagnostic;
 - every solution passes the visible test suite, so the visible tests don't give the lesson away;
 - every history session's start state and checks;
 - that memory-only lessons leave no trace in the code;
-- that no oracle line or hidden-test string appears in any memory text.
+- that no oracle line or hidden-test string appears in the tickets, reviews and chat. The same check runs on the agents' own transcripts and notes when the corpus is frozen.
 
-`python scripts/stub_e2e.py` runs every stage end to end with stub models, with no network.
+`python scripts/stub_e2e.py` runs every stage end to end with stub models and no network. The stages are history, distillation, freeze, and all 32 tasks × 6 conditions.
 
 ## Layout
 
@@ -70,7 +75,7 @@ Not run yet. The paid stages are pilot, history, main run and a Sonnet check, ca
   - `memory/`: corpus, labels, retriever, conditions, distillation
   - `grade.py`, `sandbox.py`: grading and sandboxing
   - `meter.py`, `proxy.py`, `netguard.py`: spend cap and network guard
-- `scripts/`: `validate.py`, `stub_e2e.py`, `paid.py`, `analyze.py`, `manifest.py`
+- `scripts/`: `validate.py`, `stub_e2e.py`, `paid.py`, `label_notes.py`, `analyze.py`, `manifest.py`
 
 ## Running
 
@@ -78,23 +83,30 @@ Requirements:
 - Python 3.13 with `anthropic`, `pytest`, `pyyaml`, `numpy`;
 - Node 26 (no packages);
 - macOS `sandbox-exec`;
-- for the embedding half of retrieval, a second interpreter with `numpy`, `onnxruntime` and `tokenizers` (`SMB_RETRIEVAL_PYTHON`), and the `bge-small-en-v1.5` ONNX export (`SMB_EMBED_MODEL`).
+- for the embedding half of retrieval, set two environment variables: `SMB_RETRIEVAL_PYTHON` (an interpreter with `numpy`, `onnxruntime` and `tokenizers`) and `SMB_EMBED_MODEL` (the `bge-small-en-v1.5` ONNX export);
+- workspaces live under `SMB_WORK` (default `~/.smb-work`).
 
 ```
 python -m pytest                       # harness tests
 python scripts/stub_e2e.py             # $0 end-to-end run
 python scripts/validate.py             # G1 validation
 python scripts/manifest.py --freeze    # freeze before any paid run
-python scripts/paid.py history --corpus run1 --repos billing --cap 0.50
-python scripts/paid.py eval --run pilot --corpus run1 --repos billing --epochs 1 --cap 1.50
+python scripts/paid.py history --stage pilot --corpus run1 --repos billing
+python scripts/paid.py distill --stage pilot --corpus run1 --repos billing
+python scripts/label_notes.py run1                     # then review the labels by hand
+python scripts/paid.py freeze-corpus --corpus run1 --repos billing
+python scripts/paid.py eval --stage pilot --run pilot --corpus run1 --repos billing --epochs 1
 python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 ```
 
-Paid stages read the API key from a gitignored `.env`. All model traffic goes through a loopback proxy that allows only the API host. The run process can open loopback connections only. Agent code, graders and the embedder run sandboxed with no network. Every call reserves its worst-case cost against a hard cap before it is sent.
+Paid stages read the API key from a gitignored `.env`.
+- All model traffic goes through a loopback proxy that allows only the API host, and the run process can open loopback connections only.
+- Agent code, graders and the embedder run sandboxed: no network, and no reads of the benchmark's own files.
+- Every request, including every retry, reserves its worst-case cost against its stage's cap before it is sent. A request that may have been billed without returning usage is booked at that worst case.
 
 ## Limits
 
 - one fictional organisation and one draw of history sessions;
 - small families (14 memory-only, 8 stale or superseded);
-- repos of about 1,000 lines;
+- small synthetic repos;
 - the graded code shares a process with the hidden tests (editable paths are allowlisted, the JUnit set is checked exactly, and suspicious code is flagged for hand-checking).

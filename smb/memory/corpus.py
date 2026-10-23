@@ -1,8 +1,9 @@
 """Memory corpus: the history sessions' transcripts plus team chat, cut into dated chunks.
 
-A chunk carries a lesson (span label) when it contains at least SPAN_WINDOW consecutive characters of a text we
-authored for that lesson (the ticket, a review comment or a chat message, per history/*.yaml). Pattern labels
-(lessons.yaml `patterns`, same repo) are a secondary label for chunks that paraphrase a lesson.
+A chunk carries a lesson (span label) when it contains at least SPAN_WINDOW consecutive characters of one of
+that lesson's rule spans (lessons.yaml `spans`: the sentence in a ticket, review comment or chat message that
+states the rule), or the whole span if it is shorter. Pattern labels (lessons.yaml `patterns`, same repo) are a
+secondary label for chunks that paraphrase a lesson.
 """
 
 from __future__ import annotations
@@ -63,18 +64,29 @@ def chat_messages() -> list[dict]:
     return yaml.safe_load((HISTORY / "chat.yaml").read_text())["messages"]
 
 
-def authored_spans() -> dict[str, list[tuple[str, str]]]:
-    """source id -> [(lesson id, authored text)]."""
-    spans: dict[str, list[tuple[str, str]]] = {}
+def source_texts() -> dict[str, list[tuple[list[str], str]]]:
+    """source id -> [(lessons the text is tagged with, text)] for tickets, review comments and chat messages."""
+    out: dict[str, list[tuple[list[str], str]]] = {}
     for sid, s in history_specs().items():
-        for lid in s.get("ticket_lessons", []):
-            spans.setdefault(sid, []).append((lid, s["ticket"].strip()))
+        out.setdefault(sid, []).append((list(s.get("ticket_lessons", [])), s["ticket"].strip()))
         for r in s["review"]:
-            for lid in r["lessons"]:
-                spans.setdefault(sid, []).append((lid, r["text"].strip()))
+            out[sid].append((list(r["lessons"]), r["text"].strip()))
     for m in chat_messages():
-        for lid in m["lessons"]:
-            spans.setdefault(m["id"], []).append((lid, m["text"].strip()))
+        out.setdefault(m["id"], []).append((list(m["lessons"]), m["text"].strip()))
+    return out
+
+
+def authored_spans() -> dict[str, list[tuple[str, str]]]:
+    """source id -> [(lesson id, rule span)], each span checked to be a substring of a text tagged with its lesson."""
+    texts = source_texts()
+    spans: dict[str, list[tuple[str, str]]] = {}
+    for lid, d in lessons().items():
+        for src, items in (d.get("spans") or {}).items():
+            tagged = [_norm(t) for ls, t in texts.get(src, []) if lid in ls]
+            for sp in items:
+                if not any(_norm(sp) in t for t in tagged):
+                    raise ValueError(f"span for {lid} not found in a {src} text tagged with it: {sp[:60]!r}")
+                spans.setdefault(src, []).append((lid, sp))
     return spans
 
 
@@ -82,11 +94,11 @@ def _norm(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def carries(chunk_text: str, authored: str) -> bool:
-    a, c = _norm(authored), _norm(chunk_text)
+def carries(chunk_text: str, span: str) -> bool:
+    a, c = _norm(span), _norm(chunk_text)
     if len(a) <= SPAN_WINDOW:
         return a in c
-    return any(a[i:i + SPAN_WINDOW] in c for i in range(0, len(a) - SPAN_WINDOW + 1, 20))
+    return any(a[i:i + SPAN_WINDOW] in c for i in range(0, len(a) - SPAN_WINDOW + 1))
 
 
 def _split(text: str) -> list[str]:
@@ -154,9 +166,9 @@ def session_chunks(sid: str, spec: dict, transcript: list[dict]) -> list[Chunk]:
     return chunks
 
 
-def build(corpus_dir: Path) -> list[Chunk]:
-    """Chunks from <corpus_dir>/<session>/transcript.jsonl for every history session, plus chat."""
-    specs = history_specs()
+def build(corpus_dir: Path, repos: list[str] | None = None) -> list[Chunk]:
+    """Chunks from <corpus_dir>/<session>/transcript.jsonl for every history session (of `repos`), plus chat."""
+    specs = {sid: s for sid, s in history_specs().items() if repos is None or s["repo"] in repos}
     chunks: list[Chunk] = []
     for sid, spec in sorted(specs.items(), key=lambda kv: (str(kv[1]["date"]), kv[0])):
         path = corpus_dir / sid / "transcript.jsonl"

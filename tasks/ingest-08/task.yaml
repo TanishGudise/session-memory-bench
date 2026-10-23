@@ -4,7 +4,7 @@ family: X
 lessons: [ingest.amount-strings]
 other_lessons: [billing.money-integer-cents]
 author: Theo
-branch: theo/contoso-invoices-feed
+branch: theo/tessaly-invoices-feed
 prompt: |
-  Add a feed for Contoso's invoices in ingest/feeds/contoso.py with `parse(text)`, registered as "contoso". CSV columns: invoice_no,sku,qty,amount,invoice_date (ISO date); amount looks like `1234.50`.
+  Add a feed for Tessaly's invoices in ingest/feeds/tessaly.py with `parse(text)`, registered as "tessaly". CSV columns: invoice_no,sku,qty,amount,invoice_date (ISO date); amount looks like `1234.50`.
 editable: ["ingest/**", "tests/**"]

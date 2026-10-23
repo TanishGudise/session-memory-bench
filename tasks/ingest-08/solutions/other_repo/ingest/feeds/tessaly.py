@@ -1,4 +1,4 @@
-"""Contoso invoices: invoice_no,sku,qty,amount,invoice_date (ISO)."""
+"""Tessaly invoices: invoice_no,sku,qty,amount,invoice_date (ISO)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from ingest.feeds.base import ParseResult, register
 from ingest.skus import normalize_sku
 
 
-@register("contoso")
+@register("tessaly")
 def parse(text: str) -> ParseResult:
     result = ParseResult()
     for line, row in enumerate(csv.DictReader(io.StringIO(text)), start=2):
@@ -21,7 +21,7 @@ def parse(text: str) -> ParseResult:
             continue
         try:
             result.records.append({
-                "source": "contoso",
+                "source": "tessaly",
                 "external_id": row["invoice_no"],
                 "item_code": normalize_sku(row["sku"]),
                 "qty": int(row["qty"]),

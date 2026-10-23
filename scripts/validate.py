@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import re
 import sys
@@ -20,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from smb import netguard  # noqa: E402
 from smb.grade import grade_tree, run_visible  # noqa: E402
 from smb.history import history_task  # noqa: E402
+from smb.leakage import find_leaks  # noqa: E402
 from smb.memory.corpus import authored_spans, chat_messages, history_specs, lessons  # noqa: E402
 from smb.paths import ROOT  # noqa: E402
 from smb.repos import main_state, repo_language, state  # noqa: E402
@@ -166,36 +166,14 @@ def evidence(errors: list) -> dict:
 
 
 def leakage(errors: list) -> dict:
-    """No oracle line that the task adds, and no hidden-test string literal, appears in any memory text we wrote."""
-    corpus = "\n".join(text for spans in authored_spans().values() for _, text in spans)
-    corpus += "\n" + "\n".join(s["ticket"] for s in history_specs().values())
-    corpus += "\n" + "\n".join(r["text"] for s in history_specs().values() for r in s["review"])
-    corpus += "\n" + "\n".join(m["text"] for m in chat_messages())
-    norm = re.sub(r"\s+", " ", corpus)
-    out = {}
-    for t in all_tasks():
-        main = main_state(t.repo)
-        sol = t.solution_state("oracle")
-        added = set()
-        for rel, data in sol.items():
-            before = set(main.get(rel, b"").decode(errors="replace").splitlines())
-            for line in data.decode(errors="replace").splitlines():
-                s = line.strip()
-                if len(s) >= 25 and line not in before and not s.startswith(("import ", "from ", "#", "//")):
-                    added.add(s)
-        literals = set()
-        for rel, data in t.hidden_files().items():
-            text = data.decode()
-            if rel.endswith(".py"):
-                for node in ast.walk(ast.parse(text)):
-                    if isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) >= 12:
-                        literals.add(node.value)
-            else:
-                literals.update(m.group(1) for m in re.finditer(r'"([^"\n]{12,})"', text))
-        leaks = sorted(x for x in added | literals if re.sub(r"\s+", " ", x) in norm)
-        out[t.id] = leaks
-        check(not leaks, f"{t.id}: leaks into memory texts: {leaks[:3]}", errors)
-    return out
+    """No oracle line that the task adds, and no hidden-test string literal, appears in any memory text we wrote.
+    (The frozen corpus, with the agents' own transcripts, is checked again at freeze-corpus.)"""
+    texts = [s["ticket"] for s in history_specs().values()] + [r["text"] for s in history_specs().values() for r in s["review"]]
+    texts += [m["text"] for m in chat_messages()]
+    leaks = find_leaks(texts)
+    for tid, hit in leaks.items():
+        errors.append(f"{tid}: leaks into memory texts: {hit[:3]}")
+    return leaks
 
 
 def main() -> int:

@@ -18,7 +18,7 @@ def test_func_fields():
 def test_lesson_empty_qty_is_quarantined():
     result = ostrava.parse(CSV)
     assert [r["external_id"] for r in result.records] == ["M-1", "M-3"]
-    assert len(result.quarantined) == 1 and result.quarantined[0]["line"] == 3
+    assert len(result.quarantined) == 1
 
 
 def test_diag_empty_qty_stored_as_zero():

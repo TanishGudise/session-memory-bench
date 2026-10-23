@@ -25,8 +25,9 @@ from smb.memory.corpus import Chunk
 from smb.paths import ROOT
 
 WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
-RETRIEVAL_PYTHON = os.environ.get("SMB_RETRIEVAL_PYTHON", str(Path.home() / "post-cutoff-api-bench/envs/retrieval/.venv/bin/python"))
-EMBED_MODEL = os.environ.get("SMB_EMBED_MODEL", str(Path.home() / "post-cutoff-api-bench/models/bge-small-en-v1.5"))
+# An interpreter with numpy, onnxruntime and tokenizers, and the bge-small-en-v1.5 ONNX export (see README).
+RETRIEVAL_PYTHON = os.environ.get("SMB_RETRIEVAL_PYTHON", "")
+EMBED_MODEL = os.environ.get("SMB_EMBED_MODEL", "")
 CACHE = ROOT / ".cache" / "embeddings"
 
 
@@ -45,6 +46,8 @@ class Embedder:
     """The embedding server runs sandboxed: no network, writes only under .cache/."""
 
     def __init__(self):
+        if not (RETRIEVAL_PYTHON and EMBED_MODEL):
+            raise SystemExit("set SMB_RETRIEVAL_PYTHON and SMB_EMBED_MODEL for the embedding half of retrieval")
         cache = ROOT / ".cache"
         cache.mkdir(parents=True, exist_ok=True)
         cmd = ["/usr/bin/sandbox-exec", "-p", sandbox.profile(cache),

@@ -40,6 +40,15 @@ def test_lesson_exactly_500_needs_no_approver():
     assert len(gw.refunds) == 1
 
 
+def test_lesson_repeated_call_after_failure_refunds_once():
+    s, gw = _setup()
+    gw.timeout_after_commit = 3
+    with pytest.raises(Exception):
+        refund_invoice(s, gw, "inv_1", 1000, requested_by="ana")
+    refund_id = refund_invoice(s, gw, "inv_1", 1000, requested_by="ana")  # support clicks again
+    assert list(gw.refunds) == [refund_id]
+
+
 def test_lesson_timeout_after_gateway_processed_refunds_once():
     s, gw = _setup()
     gw.timeout_after_commit = 1

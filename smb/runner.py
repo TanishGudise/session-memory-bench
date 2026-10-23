@@ -28,7 +28,7 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
     name = CONDITIONS[cond]
     ep_id = f"{task.id}__{cond}__e{epoch}"
     ep_dir = run_dir / "episodes" / ep_id
-    ws_dir = WORK / "episodes" / f"{ep_id}-{uuid.uuid4().hex[:8]}"
+    ws_dir = WORK / "w" / uuid.uuid4().hex[:12] / task.repo
     write_tree(task.base_state(), ws_dir)
     ws = Workspace(ws_dir, task.lang, pid_dir=WORK / "pids")
     if name == "oracle":
@@ -58,7 +58,9 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
         result = {
             "episode": ep_id, "task": task.id, "repo": task.repo, "family": task.family, "condition": cond,
             "condition_name": name, "epoch": epoch, "model": model, "stop": stop,
-            "score": grade["score"] if grade else None, "grade_status": grade["status"] if grade else None,
+            # PREREGISTRATION: context_limit, call_limit, wall_clock, no_finish and refusal count as fails
+            "score": (grade["score"] if stop == "finished" else 0) if grade else None,
+            "graded_score": grade["score"] if grade else None, "grade_status": grade["status"] if grade else None,
             "tests": grade["tests"] if grade else {}, "diag": grade.get("diag", {}) if grade else {},
             "suspicious": grade.get("suspicious", []) if grade else [],
             "lessons": task.lessons, "stale_lessons": task.extra.get("stale_lessons", []),
@@ -78,7 +80,7 @@ def run_episode(task: Task, cond: str, epoch: int, client, model: str, providers
                 fh.flush()
         return result
     finally:
-        shutil.rmtree(ws_dir, ignore_errors=True)
+        shutil.rmtree(ws_dir.parent, ignore_errors=True)
 
 
 def done_episodes(run_dir: Path) -> set[str]:

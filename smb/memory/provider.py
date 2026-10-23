@@ -124,39 +124,43 @@ def render_session_raw(sid: str, spec: dict, transcript: list[dict]) -> str:
     return "\n".join(lines)
 
 
-class Raw:
-    """This repo's session transcripts, newest first, whole sessions only, plus team chat, within RAW_TOKENS."""
-
-    def __init__(self, corpus_dir: Path, count_tokens: Callable[[str], int], cap_tokens: int = RAW_TOKENS):
-        self.corpus_dir, self.count, self.cap = corpus_dir, count_tokens, cap_tokens
-        self._cache: dict[str, Recall] = {}
-
-    def recall(self, prompt, prior_assistant_turn, workspace) -> Recall:
-        repo = workspace["repo"]
-        if repo in self._cache:
-            return self._cache[repo]
-        chat = sorted(chat_messages(), key=lambda m: (str(m["date"]), m["id"]), reverse=True)
+def build_raw_blocks(corpus_dir: Path, count_tokens: Callable[[str], int], cap_tokens: int = RAW_TOKENS,
+                     repos: list[str] | None = None) -> dict[str, dict]:
+    """Condition b's block per repo, computed once at corpus freeze: this repo's sessions newest first, whole
+    sessions only, plus all team chat, up to cap_tokens counted by count_tokens."""
+    chat = sorted(chat_messages(), key=lambda m: (str(m["date"]), m["id"]), reverse=True)
+    spans = authored_spans()
+    out = {}
+    for repo in sorted({s["repo"] for s in history_specs().values()} if repos is None else repos):
         entries = ["=== Team chat ===\n" + "\n".join(f"[{m['date']} · {m['channel']} · {m['author']}] {m['text'].strip()}" for m in chat)]
         sources = [m["id"] for m in chat]
         specs = sorted(((sid, s) for sid, s in history_specs().items() if s["repo"] == repo),
                        key=lambda kv: (str(kv[1]["date"]), kv[0]), reverse=True)
-        included, skipped = [], []
+        included = []
         for sid, spec in specs:
-            text = render_session_raw(sid, spec, read_transcript(self.corpus_dir / sid / "transcript.jsonl"))
-            candidate = _wrap(INTRO_RAW, entries + [text])
-            if self.count(candidate) > self.cap:
-                skipped.append(sid)
+            text = render_session_raw(sid, spec, read_transcript(corpus_dir / sid / "transcript.jsonl"))
+            if count_tokens(_wrap(INTRO_RAW, entries + [text])) > cap_tokens:
                 break  # whole sessions only, newest first: stop at the first that doesn't fit
             entries.append(text)
             included.append(sid)
-        skipped += [sid for sid, _ in specs if sid not in included and sid not in skipped]
         block = _wrap(INTRO_RAW, entries)
-        spans = authored_spans()
-        present = sorted({lid for src in sources + included for lid, text in spans.get(src, []) if carries(block, text)})
-        r = Recall(block=block, sources=sources + included, lessons=present, chars=len(block),
-                   meta={"sessions_included": included, "sessions_skipped": skipped, "tokens": self.count(block)})
-        self._cache[repo] = r
-        return r
+        present = sorted({lid for src in sources + included for lid, sp in spans.get(src, []) if carries(block, sp)})
+        out[repo] = {"block": block, "sources": sources + included, "lessons": present, "chars": len(block),
+                     "tokens": count_tokens(block), "sessions_included": included,
+                     "sessions_skipped": [sid for sid, _ in specs if sid not in included]}
+    return out
+
+
+class FrozenRaw:
+    """Condition b at eval time: the blocks frozen in raw_blocks.json."""
+
+    def __init__(self, blocks: dict[str, dict]):
+        self.blocks = blocks
+
+    def recall(self, prompt, prior_assistant_turn, workspace) -> Recall:
+        b = self.blocks[workspace["repo"]]
+        return Recall(block=b["block"], sources=list(b["sources"]), lessons=list(b["lessons"]), chars=b["chars"],
+                      meta={k: b[k] for k in ("tokens", "sessions_included", "sessions_skipped")})
 
 
 @dataclass
@@ -170,14 +174,16 @@ class Note:
     pattern_lessons: list[str] = field(default_factory=list)
 
 
-def notes_as_chunks(notes_path: Path) -> list[Chunk]:
+def notes_as_chunks(notes_path: Path, labels_path: Path) -> list[Chunk]:
+    """Distilled notes as retrievable chunks, labelled with the frozen hand labels (notes_labels.json)."""
+    labels = json.loads(labels_path.read_text())
     out = []
     for line in notes_path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             n = json.loads(line)
             out.append(Chunk(id=n["id"], repo=n["repo"], source=n["source"], kind="note", date=n["date"],
                              author="distilled", where=n.get("where", n["source"]), text=n["text"],
-                             lessons=n.get("lessons", []), pattern_lessons=n.get("pattern_lessons", [])))
+                             lessons=sorted(labels["labels"][n["id"]]), pattern_lessons=n.get("pattern_lessons", [])))
     return out
 
 

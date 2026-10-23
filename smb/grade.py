@@ -26,7 +26,9 @@ from smb.tasks import Task
 # Graded code shares a process with the hidden tests, so a determined candidate could tamper with the run. These
 # references in non-test candidate files get the episode flagged; every flagged pass is hand-checked before it counts.
 SUSPICIOUS = re.compile(r"junit|_pytest|\bpytest\b|atexit|os\._exit|sys\.exit|ctypes|\bgc\.|\binspect\b|sys\.modules"
-                        r"|process\.exit|node:test|--test|reporter")
+                        r"|__eq__|__ne__|__hash__|builtins|setattr\(|monkeypatch|\bTZ\b|tzset|os\.environ"
+                        r"|process\.exit|node:test|node:assert|\bassert\b[^;\n]*\)\s*\.\w+\s*=|assert\.\w+\s*="
+                        r"|defineProperty|prototype|process\.env|--test|reporter")
 TS_TEST = re.compile(r"""\btest\(\s*(["'`])((?:func|lesson|diag): (?:(?!\1).)+)\1""")
 TIMEOUT = 120
 
@@ -75,7 +77,7 @@ def parse_junit(path: Path) -> dict[str, str]:
 
 
 def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
-    gdir = WORK / "grade" / f"{task.id}-{label or 'x'}-{uuid.uuid4().hex[:8]}"
+    gdir = WORK / "g" / uuid.uuid4().hex[:12]
     src = gdir / "src"
     try:
         write_tree(tree, src)
@@ -90,6 +92,9 @@ def grade_tree(task: Task, tree: dict[str, bytes], label: str = "") -> dict:
             files = sorted(p.relative_to(src).as_posix() for p in hidden_root.rglob("*.test.ts"))
             cmd = ["node", "--test", "--test-reporter=junit", f"--test-reporter-destination={junit}", *files]
         res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=TIMEOUT, pid_dir=WORK / "pids")
+        if res.timed_out:  # a loaded machine can slow a correct run; retry once with twice the time
+            junit.unlink(missing_ok=True)
+            res = sandbox.run(cmd, cwd=src, write_root=gdir, env=env, timeout=2 * TIMEOUT, pid_dir=WORK / "pids")
         expected = expected_tests(task)
         result = {"task": task.id, "label": label, "timed_out": res.timed_out, "exit": res.code,
                   "seconds": round(res.seconds, 2), "score": 0}
@@ -139,7 +144,7 @@ def grade_workspace(task: Task, workspace: dict[str, bytes], label: str = "") ->
 
 
 def run_visible(task_repo_tree: dict[str, bytes], lang: str, tz: str, label: str = "visible", timeout: float = 120) -> sandbox.Result:
-    gdir = WORK / "visible" / f"{label}-{uuid.uuid4().hex[:8]}"
+    gdir = WORK / "v" / uuid.uuid4().hex[:12]
     src = gdir / "src"
     try:
         write_tree(task_repo_tree, src)

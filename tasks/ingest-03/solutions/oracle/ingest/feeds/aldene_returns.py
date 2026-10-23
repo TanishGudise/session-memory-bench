@@ -1,4 +1,4 @@
-"""Aldene (UK) returns. Non-US partners send DD/MM/YYYY dates."""
+"""Aldene returns. Aldene is a non-US partner: dates are DD/MM/YYYY."""
 
 from __future__ import annotations
 

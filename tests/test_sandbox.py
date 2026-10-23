@@ -28,3 +28,27 @@ def test_deadline_kills_process_group(tmp_path):
     t0 = time.monotonic()
     r = _run(tmp_path, code, timeout=2)
     assert r.timed_out and r.code == 124 and time.monotonic() - t0 < 20
+
+
+def test_benchmark_files_and_other_workspaces_are_unreadable(tmp_path):
+    from smb.paths import ROOT, WORK
+    other = WORK / "w" / "test-other-ws"
+    other.mkdir(parents=True, exist_ok=True)
+    (other / "secret.txt").write_text("x")
+    own = WORK / "w" / "test-own-ws"
+    own.mkdir(parents=True, exist_ok=True)
+    (own / "mine.txt").write_text("ok")
+    try:
+        code = (
+            "import sys\n"
+            f"for p in [{str(ROOT / 'tasks/billing-03/hidden/test_hidden.py')!r}, {str(ROOT / 'lessons.yaml')!r}, {str(other / 'secret.txt')!r}]:\n"
+            "    try:\n        open(p).read(); print('READ', p)\n    except OSError:\n        print('DENIED')\n"
+            f"print(open({str(own / 'mine.txt')!r}).read())\n"
+        )
+        env = sandbox.base_env(own / ".home", "UTC")
+        r = sandbox.run([sys.executable, "-c", code], cwd=own, write_root=own, env=env, timeout=30)
+        assert r.output.count("DENIED") == 3 and "READ" not in r.output and r.output.strip().endswith("ok"), r.output
+    finally:
+        import shutil
+        shutil.rmtree(other, ignore_errors=True)
+        shutil.rmtree(own, ignore_errors=True)

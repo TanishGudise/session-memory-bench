@@ -6,11 +6,17 @@
 billing.gateway-idempotency:
   kind: D
   source: [billing-H1]
+  spans:
+    billing-H1:
+      - "every gateway write (charges, refunds, anything new we add) has to pass an idempotency key that is deterministic for the logical operation, built with op_key(invoice_id, op, n), and the retry has to reuse that same key"
   note: Every gateway write (charge, refund, anything new) passes an idempotency key that is deterministic for the logical operation, built with payments.op_key(invoice_id, op, n), and retries (payments.with_retries) reuse the same key; a timeout can arrive after the gateway already processed the request.
   patterns: [idempoten, op_key]
 billing.fetch-invoice-accessor:
   kind: stale
   source: [billing-H1]
+  spans:
+    billing-H1:
+      - "read invoices through store.fetch_invoice() rather than querying the tables yourself. It's the accessor we use everywhere"
   note: Read invoices through store.fetch_invoice(); it's the accessor used everywhere (it caches).
   patterns: [fetch_invoice]
 billing.get-invoice-current:
@@ -21,68 +27,112 @@ billing.get-invoice-current:
 billing.expand-contract:
   kind: M
   source: [billing-H2]
+  spans:
+    billing-H2:
+      - "we never rename or drop a column in a single migration"
+      - "Renames are expand/contract: add the new column, backfill it, have the code write both columns, and drop the old column in a later release"
   note: Never rename or drop a column in a single migration; during a rolling deploy the old app version still reads the old column. Renames are expand/contract - add the new column, backfill it, write both columns, and drop the old one in a later release.
   patterns: [expand/contract, "rename or drop a column", rolling deploy]
   evidence: [expand, rename or drop, backfill]
 billing.settlement-tz-flake:
   kind: M
   source: [billing-H3]
+  spans:
+    billing-H3:
+      - "It's the known flake: test_settlement_cutoff builds a naive datetime, so it only passes on machines whose TZ is UTC"
+      - "The cutoff logic itself is correct (17:00 UTC, finance reconciles on it) and must not change"
+      - "Please don't change settlement.py: cutoff_utc() is right"
   note: tests/test_settlement.py::test_settlement_cutoff fails on machines whose TZ isn't UTC (it builds a naive datetime; CI runs with TZ=UTC). The cutoff logic (17:00 UTC) is correct and must not change; don't edit settlement.py to make that test pass.
   patterns: [known flake, "TZ is UTC", naive datetime]
   evidence: [flake, TZ=UTC, naive datetime]
 billing.no-dunning-under-1:
   kind: M
   source: [billing-H4]
+  spans:
+    billing-H4:
+      - "support decided we don't send payment reminders for balances under $1.00 (100 cents)"
   note: Support decision - no payment reminders (dunning) for balances under $1.00 (100 cents); reports still list those invoices.
   patterns: ["under \\$1\\.00", "100 cents", dunning]
   evidence: [under \$1, 100 cents, dunning, reminder]
 billing.refund-second-approver:
   kind: M
   source: [chat-billing-0908]
+  spans:
+    chat-billing-0908:
+      - "refunds over $500.00 need a second approver, and the approver can't be the person who requested the refund"
   note: SOC 2 rule - refunds over $500.00 (50000 cents) need a second approver who is not the person who requested the refund.
   patterns: [second approver, "over \\$500"]
   evidence: [approver, '50000', 500\.00]
 billing.tax-before-discount:
   kind: stale
   source: [billing-H5]
+  spans:
+    billing-H5:
+      - "finance computes tax on the subtotal before the discount (the coupon comes off after tax)"
+      - "Tax needs to be computed on the pre-discount subtotal"
   note: Tax is computed on the pre-discount subtotal; the coupon comes off after tax.
   patterns: [before the discount, pre-discount]
 billing.tax-after-discount:
   kind: current
   source: [billing-H6]
+  spans:
+    billing-H6:
+      - "tax is now computed on the discounted subtotal (after the coupon), not before"
+      - "tax on the discounted subtotal from now on, everywhere we compute totals"
   note: Since the finance rule change decided on 2026-09-22 (effective 2026-10-01), tax is computed on the discounted subtotal; billing.tax.compute_total does this.
   patterns: [discounted subtotal, after the coupon]
 billing.money-integer-cents:
   kind: x-source
   source: [billing-H5]
+  spans:
+    billing-H5:
+      - "money stays integer cents everywhere, never floats or decimal strings"
   note: In billing, money is integer cents everywhere, never floats or decimal strings.
   patterns: [integer cents]
 notify.quiet-hours:
   kind: M
   source: [notify-H1]
-  note: No marketing SMS between 21:00 and 08:00 in the recipient's own time zone (user.tz); transactional messages may go out at any hour.
-  patterns: ["21:00", quiet hours, "recipient's own time zone"]
-  evidence: ['21:00', quiet, '08:00']
+  spans:
+    notify-H1:
+      - "for anything marketing that goes out by SMS: no sends between 20:00 and 09:00 in the recipient's own time zone (user.tz)"
+  note: No marketing SMS between 20:00 and 09:00 in the recipient's own time zone (user.tz), stricter than the legal minimum on purpose; transactional messages may go out at any hour.
+  patterns: ["20:00", quiet hours, "recipient's own time zone"]
+  evidence: ['20:00', quiet, '09:00']
 notify.sms-480:
   kind: M
   source: [notify-H2]
+  spans:
+    notify-H2:
+      - "their support confirmed they silently drop anything longer"
+      - "the whole message must be at most 480 characters"
+      - "cut the body and end it with \"\u2026\", but keep the link intact at the end"
   note: The SMS provider silently drops messages over 480 characters. Every SMS must be at most 480 characters; if it can be longer, cut the body, end it with "…", and keep the link intact at the end.
   patterns: ["480"]
   evidence: ['480']
 notify.formal-german:
   kind: M
   source: [chat-brand-0902]
+  spans:
+    chat-brand-0902:
+      - "all German-language customer communication uses the formal (Sie) templates, locale key de-formal"
   note: All German-language customer communication uses the formal (Sie) templates, locale key de-formal; the informal de templates are legacy and must not be used for anything new.
   patterns: [de-formal, "formal \\(Sie\\)"]
   evidence: [locale\s*==\s*"de", formal \(Sie\), brand]
 notify.redact-pii:
   kind: D
   source: [notify-H5]
+  spans:
+    notify-H5:
+      - "Use log_event(): it runs redact() on every field. We never log raw email addresses or phone numbers"
+      - "Log through log_event() so it gets redacted"
   note: Log through notify.log.log_event(), which redacts every field; never log raw email addresses or phone numbers.
   patterns: [log_event, redact]
 notify.send-email-helper:
   kind: stale
   source: [notify-H1]
+  spans:
+    notify-H1:
+      - "Please send through email.send_email() rather than calling the provider directly"
   note: Send email through notify.email.send_email(), which renders the template and logs.
   patterns: [send_email]
 notify.mailer-dispatch:
@@ -93,34 +143,55 @@ notify.mailer-dispatch:
 notify.retries-3x2:
   kind: stale
   source: [notify-H3]
+  spans:
+    notify-H3:
+      - "The retry policy we use: 3 attempts in total, 2 seconds apart"
+      - "3 attempts total with 2 seconds between them"
   note: Retry policy - 3 attempts in total, 2 seconds apart.
   patterns: ["3 attempts", "2 seconds apart"]
 notify.retries-exponential:
   kind: current
   source: [notify-H4]
+  spans:
+    notify-H4:
+      - "New standard: 5 attempts with exponential backoff, waiting 1, 2, 4, then 8 seconds between attempts"
   note: Standard retry policy since 2026-09-24 (notify/retry.py) - 5 attempts with exponential backoff, waiting 1, 2, 4, then 8 seconds.
   patterns: [exponential backoff, "1, 2, 4"]
-inventory.hold-expiry-15m:
+inventory.hold-expiry:
   kind: M
   source: [inventory-H1]
-  note: Cart holds expire after 15 minutes; anything that computes availability must ignore holds older than 15 minutes.
-  patterns: [15 minutes, expire]
-  evidence: [15 \* 60, 15 minutes, expire, ttl]
-inventory.brightline-cases:
+  spans:
+    inventory-H1:
+      - "Ops decided holds expire after 25 minutes"
+      - "Anything that computes availability has to ignore holds older than 25 minutes"
+  note: Cart holds expire after 25 minutes; anything that computes availability must ignore holds older than 25 minutes.
+  patterns: [25 minutes, expire]
+  evidence: ['25 \* 60', 25 minutes, expire, ttl]
+inventory.bramblecote-cases:
   kind: M
   source: [inventory-H2]
-  note: Brightline's ASN quantities are cases of 6 units, not units; multiply their quantities by 6 when receiving.
-  patterns: [cases of 6, Brightline]
-  evidence: [brightline, cases of]
+  spans:
+    inventory-H2:
+      - "Bramblecote's ASN quantities are cases of 6 units, not units"
+      - "multiply their quantities by 6"
+  note: Bramblecote's ASN quantities are cases of 6 units, not units; multiply their quantities by 6 when receiving.
+  patterns: [cases of 6, Bramblecote]
+  evidence: [bramblecote, cases of]
 inventory.rno-returns-only:
   kind: M
   source: [chat-ops-0909]
+  spans:
+    chat-ops-0909:
+      - "RNO (Reno) is a returns-only location. Never allocate customer orders from RNO stock"
   note: RNO (Reno) is a returns-only location; never allocate customer orders from RNO stock, even when it has the most units.
   patterns: [returns-only, RNO]
   evidence: [returns-only, returns only]
 inventory.withtx:
   kind: D
   source: [inventory-H5]
+  spans:
+    inventory-H5:
+      - "every multi-step stock write goes through db.withTx(), so a failure halfway leaves nothing behind"
   note: Every multi-step stock write goes through db.withTx() so a failure halfway leaves nothing behind (rule since INC-450).
   patterns: [withTx, INC-450]
 inventory.sku-case-sensitive:
@@ -131,16 +202,27 @@ inventory.sku-case-sensitive:
 inventory.backorders-allowed:
   kind: stale
   source: [inventory-H3]
+  spans:
+    inventory-H3:
+      - "Backorders are allowed: if stock is short, reserve anyway and let reserved exceed on hand"
+      - "Please don't reject reservations when stock is short; backorders are allowed"
   note: Backorders are allowed - reserve even when stock is short and let reserved exceed on hand.
   patterns: [backorders are allowed, reserve anyway]
 inventory.no-backorders:
   kind: current
   source: [inventory-H4]
+  spans:
+    inventory-H4:
+      - "reserve() must throw an InsufficientStock error (export the class from src/stock.ts) when there isn't enough unreserved stock, and change nothing in that case"
+      - "No backorders anywhere from now on"
   note: Since 2026-09-16 there are no backorders - reserve() throws InsufficientStock and changes nothing when unreserved stock is short.
   patterns: [no backorders, InsufficientStock]
 inventory.stock-get:
   kind: stale
   source: [inventory-H1]
+  spans:
+    inventory-H1:
+      - "Use stock.get(db, sku) whenever you need a stock number"
   note: Use stock.get(db, sku) whenever you need a stock number.
   patterns: ["stock\\.get"]
 inventory.stock-level:
@@ -151,44 +233,72 @@ inventory.stock-level:
 ingest.kestrel-berlin-time:
   kind: M
   source: [ingest-H1]
+  spans:
+    ingest-H1:
+      - "Kestrel sends Europe/Berlin local time with no offset"
+      - "convert from Europe/Berlin to UTC, daylight saving included"
   note: Kestrel's timestamps are Europe/Berlin local time without an offset; convert from Europe/Berlin to UTC, daylight saving included.
   patterns: [Europe/Berlin, Berlin]
   evidence: [berlin, kestrel]
 ingest.dedupe-source-external-id:
   kind: M
   source: [ingest-H2]
+  spans:
+    ingest-H2:
+      - "the resend has a fresh exported_at on every row, so row hashes differ between the two copies"
+      - "make loading idempotent on (source, external_id), never on a row hash"
   note: Partners resend whole files after failed uploads with a fresh exported_at on every row; loading must be idempotent on (source, external_id), never on a row hash.
   patterns: ["\\(source, external_id\\)", row hash, resend]
   evidence: [dedupe, resend, idempoten]
 ingest.dmy-dates:
   kind: M
   source: [ingest-H6]
-  note: Every non-US partner sends dates as DD/MM/YYYY (US partners MM/DD/YYYY); never use a fuzzy or automatic date parser.
+  spans:
+    ingest-H6:
+      - "Every non-US partner (today that's Kestrel and Aldene) writes slash dates day first, DD/MM/YYYY, and we never use a fuzzy or automatic date parser"
+  note: Every non-US partner (today Kestrel and Aldene) writes slash dates day first, DD/MM/YYYY (US partners like Acme use MM/DD/YYYY); never use a fuzzy or automatic date parser.
   patterns: [DD/MM, non-US]
   evidence: ['%d/%m', DD/MM, non-US]
 ingest.registry-quarantine:
   kind: D
   source: [ingest-H6]
+  spans:
+    ingest-H6:
+      - "register it in FEEDS and quarantine bad rows with a reason instead of raising"
   note: Every feed is registered in FEEDS (imported from ingest/feeds/__init__.py) and quarantines bad rows with a reason instead of raising.
   patterns: [quarantine, FEEDS]
 ingest.null-qty-zero:
   kind: stale
   source: [ingest-H3]
+  spans:
+    ingest-H3:
+      - "An empty quantity means zero units: store 0, don't drop the row"
+      - "Please store empty quantities as 0 rather than quarantining the row"
   note: An empty quantity means zero units - store 0, don't drop the row.
   patterns: [means zero, store 0]
 ingest.null-qty-quarantine:
   kind: current
   source: [ingest-H4]
+  spans:
+    ingest-H4:
+      - "From now on an empty quantity is an error: quarantine the row with reason \"missing qty\""
+      - "empty quantities are quarantined, never coerced to 0"
   note: Since 2026-09-18 an empty quantity is an error in every feed - quarantine the row with reason "missing qty", never coerce it to 0.
   patterns: [missing qty, never coerced]
 ingest.normalize-skus:
   kind: x-source
   source: [ingest-H5]
+  spans:
+    ingest-H5:
+      - "Always normalize SKUs (trim and upper-case) before dedupe or joins"
   note: In ingest, SKUs are normalized (trimmed and upper-cased) before dedupe or joins.
   patterns: [normalize, upper-case]
 ingest.sku-field:
   kind: stale
   source: [ingest-H6]
+  spans:
+    ingest-H6:
+      - "records follow schema.py exactly (source, external_id, sku, qty, amount, occurred_at, exported_at)"
   note: Records follow schema.py - source, external_id, sku, qty, amount, occurred_at, exported_at.
   patterns: ["\\bsku, qty"]
 ingest.item-code:

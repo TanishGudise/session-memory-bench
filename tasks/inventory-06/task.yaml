@@ -6,5 +6,5 @@ stale_lessons: [inventory.backorders-allowed]
 author: Mei
 branch: mei/bundle-orders
 prompt: |
-  Bundles are orders for several SKUs that ship together. Add `reserveBundle(db, items)` in a new file src/bundles.ts that reserves every item of a bundle order; `items` is `[{ sku, qty }]`.
+  Bundles are orders for several SKUs that ship together. Add `reserveBundle(db, items)` in a new file src/bundles.ts that reserves every item of a bundle order; `items` is `[{ sku, qty }]`. A bundle is reserved as a whole: all items or none.
 editable: ["src/**", "test/**"]

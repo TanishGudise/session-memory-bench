@@ -27,16 +27,17 @@ test("func: fresh cart holds count", () => {
   assert.equal(availableToPromise(db, "MUG-1", NOW), 5);
 });
 
-test("lesson: holds older than 15 minutes have expired", () => {
+test("lesson: holds older than 25 minutes have expired", () => {
   const db = setup();
   placeHold(db, "MUG-1", 3, "o1", minutesAgo(5));
-  placeHold(db, "MUG-1", 4, "o2", minutesAgo(20));
+  placeHold(db, "MUG-1", 4, "o2", minutesAgo(26));
   placeHold(db, "MUG-1", 1, "o3", minutesAgo(90));
   assert.equal(availableToPromise(db, "MUG-1", NOW), 5);
 });
 
-test("lesson: a hold placed 14 minutes ago still counts", () => {
+test("lesson: holds placed 18 and 24 minutes ago still count", () => {
   const db = setup();
-  placeHold(db, "MUG-1", 2, "o1", minutesAgo(14));
-  assert.equal(availableToPromise(db, "MUG-1", NOW), 6);
+  placeHold(db, "MUG-1", 2, "o1", minutesAgo(24));
+  placeHold(db, "MUG-1", 1, "o2", minutesAgo(18));
+  assert.equal(availableToPromise(db, "MUG-1", NOW), 5);
 });

@@ -1,4 +1,4 @@
-"""Juniper orders: id,product,quantity,price,date (ISO)."""
+"""Tessaly invoices: invoice_no,sku,qty,amount,invoice_date (ISO)."""
 
 from __future__ import annotations
 
@@ -11,21 +11,21 @@ from ingest.feeds.base import ParseResult, register
 from ingest.skus import normalize_sku
 
 
-@register("juniper")
+@register("tessaly")
 def parse(text: str) -> ParseResult:
     result = ParseResult()
     for line, row in enumerate(csv.DictReader(io.StringIO(text)), start=2):
-        if not (row.get("quantity") or "").strip():
+        if not (row.get("qty") or "").strip():
             result.quarantine(line, row, "missing qty")
             continue
         try:
             result.records.append({
-                "source": "juniper",
-                "external_id": row["id"],
-                "sku": normalize_sku(row["product"]),
-                "qty": int(row["quantity"]),
-                "amount": row["price"] or None,
-                "occurred_at": parse_iso_date(row["date"]),
+                "source": "tessaly",
+                "external_id": row["invoice_no"],
+                "item_code": normalize_sku(row["sku"]),
+                "qty": int(row["qty"]),
+                "amount": row["amount"] or None,
+                "occurred_at": parse_iso_date(row["invoice_date"]),
                 "exported_at": None,
             })
         except (KeyError, ValueError) as exc:

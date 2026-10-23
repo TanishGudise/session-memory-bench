@@ -30,6 +30,7 @@ def test_lesson_old_column_still_exists(tmp_path):
     s = Store(_old_db(tmp_path))
     cols = {row[1] for row in s.conn.execute("PRAGMA table_info(customers)")}
     assert {"email", "billing_email"} <= cols
+    assert s.conn.execute("SELECT email FROM customers WHERE id = 'c_old'").fetchone()[0] == "old@example.com"
 
 
 def test_lesson_new_writes_fill_both_columns(tmp_path):

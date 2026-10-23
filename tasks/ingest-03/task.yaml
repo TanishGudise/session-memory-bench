@@ -5,5 +5,5 @@ lessons: [ingest.dmy-dates]
 author: Theo
 branch: theo/aldene-returns-feed
 prompt: |
-  Add a feed for Aldene's returns (a UK partner) in ingest/feeds/aldene_returns.py with `parse(text)`, registered as "aldene_returns". CSV columns: return_id,sku,qty,returned_at, with returned_at a date like `03/04/2026`.
+  Add a feed for Aldene's returns in ingest/feeds/aldene_returns.py with `parse(text)`, registered as "aldene_returns". CSV columns: return_id,sku,qty,returned_at, with returned_at a date like `03/04/2026`.
 editable: ["ingest/**", "tests/**"]

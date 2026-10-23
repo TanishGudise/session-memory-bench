@@ -1,9 +1,9 @@
 id: inventory-02
 repo: inventory
 family: M
-lessons: [inventory.brightline-cases]
+lessons: [inventory.bramblecote-cases]
 author: Kenji
-branch: kenji/brightline-receiving
+branch: kenji/bramblecote-receiving
 prompt: |
-  We're onboarding Brightline's advance shipping notices. Add `receiveBrightlineAsn(db, warehouse, asn)` in a new file src/brightline.ts that books a Brightline ASN into stock at `warehouse`. An ASN looks like `{ supplier: "Brightline", asnId: "BL-1009", lines: [{ sku: "MUG-1", qty: 3 }, ...] }`.
+  We're onboarding Bramblecote's advance shipping notices. Add `receiveBramblecoteAsn(db, warehouse, asn)` in a new file src/bramblecote.ts that books a Bramblecote ASN into stock at `warehouse`. An ASN looks like `{ supplier: "Bramblecote", asnId: "BC-1009", lines: [{ sku: "MUG-1", qty: 3 }, ...] }`.
 editable: ["src/**", "test/**"]
