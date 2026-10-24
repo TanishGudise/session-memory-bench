@@ -2,12 +2,12 @@
 
 Which kind of memory from earlier agent sessions helps the next coding session, and when does it hurt?
 
-Coding agents now run inside teams, and products that carry memory between their sessions are appearing. The usual evaluation reverts a team's recent PRs and re-implements them with and without memory. It shows the net effect in the field, but it can't say which kind of memory produced it, whether the relevant memory was recalled at all, or how often memory made things worse. This benchmark is a controlled companion to that kind of replay:
-- the memory is real agent transcripts and PR reviews;
+Coding agents now run inside teams, and products that carry memory between their sessions are appearing. One common evaluation reverts a team's recent PRs and re-implements them with and without memory. It shows the net effect in the field, but it can't say which kind of memory produced it, whether the relevant memory was recalled at all, or how often memory made things worse. This benchmark is a controlled companion to that kind of replay:
+- the memory is real agent transcripts, with scripted PR reviews and team chat;
 - the lessons in it are labelled;
 - grading is by hidden tests only, with no LLM judge.
 
-The design, metrics and stop rules were registered before any model call: [PREREGISTRATION.md](PREREGISTRATION.md).
+The design, metrics and stop rules were registered before any model call: [PREREGISTRATION.md](PREREGISTRATION.md). Later changes and additions are dated amendments made before the runs they affect, and the extension has its own addendum ([ext/ADDENDUM.md](ext/ADDENDUM.md)).
 
 ## How it works
 
@@ -36,7 +36,7 @@ The design, metrics and stop rules were registered before any model call: [PRERE
    |---|---|---|
    | a | none | nothing |
    | b | raw | this repo's transcripts, newest first, whole sessions, plus chat, within 40k tokens |
-   | c | retrieved | hybrid BM25 + embedding search over all sessions and chat, queried with the prompt, the previous assistant turn and repo/branch (what a memory hook sees when a prompt is submitted), injected with the prompt |
+   | c | retrieved | hybrid BM25 + embedding search over all sessions and chat, queried with the prompt, the previous assistant turn and repo/branch (what a memory hook sees when a prompt is submitted), injected with the prompt. Memory is injected once, at the session's first prompt, so the previous turn is empty |
    | d | distilled | notes distilled from each session, plus the team chat, retrieved the same way |
    | f | pull | nothing injected; the agent can call `search_memory` |
    | g | oracle | the exact lesson, the ceiling |
@@ -52,12 +52,12 @@ The design, metrics and stop rules were registered before any model call: [PRERE
 Claude Haiku 5.5 throughout. Main run: 960 episodes ([RESULTS.md](RESULTS.md)). Invisible-change extension: 300 episodes ([EXT_RESULTS.md](EXT_RESULTS.md), registered in [ext/ADDENDUM.md](ext/ADDENDUM.md)). Pilot: [PILOT.md](PILOT.md). Total API spend: $4.61. The Sonnet cross-check was skipped.
 
 - **Memory strongly helps.** On tasks that need a lesson from earlier work (70 runs per condition), the agent solved 14% with no memory, 41% with retrieved snippets, 63% with a search tool, 79% with distilled notes and 99% with raw transcripts. All four registered benefit tests hold after Holm correction.
-- **Retrieval queried the way a prompt hook does missed most lessons.** The snippets held the needed lesson 25% of the time, against 88% for distilled notes and 100% for raw transcripts. Clear misses (35 of 110) fell on six lessons and were the same every epoch. On the same task and epoch, the search tool recovered the lesson and passed in 24 of the 35.
+- **Hook-shaped retrieval over transcript snippets missed most lessons.** The query is the prompt plus repo/branch at a session's first prompt. Over transcript snippets it held the needed lesson 25% of the time; the same query over distilled notes held it 88%, and raw transcripts held it 100%. Clear misses (35 of 110) fell on six lessons and were the same every epoch. On the same task and epoch, the search tool recovered the lesson and passed in 24 of the 35.
 - **Stale memory didn't hurt when the code showed the change.** The agent's own reads showed it in 238 of 240 runs, and no run followed the old rule.
-- **It did hurt when the change was only in a later chat message** (extension). Retrieved snippets followed the old rule in 20 of 50 runs and distilled notes in 10 of 50; raw transcripts and the search tool in none. Every old-rule run had recalled only the old decision. When both decisions were recalled, the agent followed the newer one in 137 of 139 runs.
+- **It did hurt when the change was only in a later chat message** (extension). Transcript snippets followed the old rule in 20 of 50 runs (two of the five tasks, every epoch), and distilled notes in 10 of 50 (one task, every epoch); raw transcripts and the search tool in none. Every old-rule run had recalled only the old decision. When both decisions were recalled, the agent followed the newer one in 137 of 139 runs.
 - **Cost.** Distilled notes were the cheapest effective memory per solved task ($0.0038 on the memory tasks, against $0.0168 with no memory). Raw transcripts cost about 2.2× as much per solve, and they only fit because these repos' histories are 29k-35k tokens.
 
-**Caveat on the retrieved condition.** It tests the *query shape* of hook-based injection (the submitted prompt, the previous assistant turn and repo/branch) with this repo's own retriever: BM25 and bge-small-en-v1.5 fused by reciprocal rank, with a 7,000-character budget. It does not test any product's server-side retrieval or LLM ranking, which may recall much more.
+**Caveat on the retrieved condition.** It tests the *query shape* of hook-based injection (the submitted prompt and repo/branch, at a session's first prompt) with this repo's own retriever: BM25 and bge-small-en-v1.5 fused by reciprocal rank, with a 7,000-character budget. It does not test any product's server-side retrieval or LLM ranking, which may recall much more.
 
 The paid stages were capped at $17.50 in total (extension: $3).
 

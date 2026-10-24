@@ -88,6 +88,11 @@ Lesson recall by span label (hand label for d's notes): b 1.00, d 0.88, f 0.51, 
 | ingest.null-qty-quarantine | session ingest-H4 | 5 | 4 |
 | inventory.withtx | session inventory-H5 | 5 | 1 |
 
+**Exploratory, after the run:** do the clear misses track how lexical the lesson is in the prompt? `scripts/explore_retrieval_misses.py runs/eval/main runs/history/run1` gives:
+- Word overlap between the prompt and the rule spans averages 0.13 for the 7 missed task-lesson pairs and 0.18 for the 17 recalled ones, and the groups overlap widely: two missed pairs sit at 0.25, two recalled ones at 0.0.
+- The best rule-carrying chunk's rank medians are 21 (BM25) and 27 (dense) for missed pairs, and 18 and 18 for recalled ones.
+- Neither measure separates the misses. Of the 35 clear misses, c still passed 15. f fixed 14 of the 20 c failures.
+
 f searched in 94% of episodes (0.98 searches per episode). Its own clear misses are spread across 10 lessons; the largest are dmy-dates 6, then withtx, formal-german (chat), redact-pii and rno-returns-only (chat) at 4 each.
 
 ## Dollars per solved task (Amendment 1), as run
