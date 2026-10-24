@@ -136,7 +136,7 @@ Paid stages read the API key from a gitignored `.env`. Run them on AC power, wit
 
 ## Data
 
-`runs/` (history transcripts, distilled notes and labels, frozen corpora, every episode's transcript and result, spend ledgers) is not in git. It is published as a separate data release, `runs.tar.gz`.
+`runs/` (history transcripts, distilled notes and labels, frozen corpora, every episode's transcript and result, spend ledgers) is not in git. It is published as a separate data release: `runs.tar.gz` in the repo's `data-v1` release (extract at the repo root).
 
 ## Limits
 
