@@ -49,7 +49,17 @@ The design, metrics and stop rules were registered before any model call: [PRERE
 
 ## Results
 
-The pilot (`PILOT.md`) and the main run (`RESULTS.md`; 960 episodes, 5 epochs) are done, at $3.64 in total. The Sonnet check has not run yet. The paid stages are pilot, history, main run and a Sonnet check, capped at $17.50 in total.
+Claude Haiku 5.5 throughout. Main run: 960 episodes ([RESULTS.md](RESULTS.md)). Invisible-change extension: 300 episodes ([EXT_RESULTS.md](EXT_RESULTS.md), registered in [ext/ADDENDUM.md](ext/ADDENDUM.md)). Pilot: [PILOT.md](PILOT.md). Total API spend: $4.61. The Sonnet cross-check was skipped.
+
+- **Memory strongly helps.** On tasks that need a lesson from earlier work (70 runs per condition), the agent solved 14% with no memory, 41% with retrieved snippets, 63% with a search tool, 79% with distilled notes and 99% with raw transcripts. All four registered benefit tests hold after Holm correction.
+- **Retrieval queried the way a prompt hook does missed most lessons.** The snippets held the needed lesson 25% of the time, against 88% for distilled notes and 100% for raw transcripts. Clear misses (35 of 110) fell on six lessons and were the same every epoch. On the same task and epoch, the search tool recovered the lesson and passed in 24 of the 35.
+- **Stale memory didn't hurt when the code showed the change.** The agent's own reads showed it in 238 of 240 runs, and no run followed the old rule.
+- **It did hurt when the change was only in a later chat message** (extension). Retrieved snippets followed the old rule in 20 of 50 runs and distilled notes in 10 of 50; raw transcripts and the search tool in none. Every old-rule run had recalled only the old decision. When both decisions were recalled, the agent followed the newer one in 137 of 139 runs.
+- **Cost.** Distilled notes were the cheapest effective memory per solved task ($0.0038 on the memory tasks, against $0.0168 with no memory). Raw transcripts cost about 2.2× as much per solve, and they only fit because these repos' histories are 29k-35k tokens.
+
+**Caveat on the retrieved condition.** It tests the *query shape* of hook-based injection (the submitted prompt, the previous assistant turn and repo/branch) with this repo's own retriever: BM25 and bge-small-en-v1.5 fused by reciprocal rank, with a 7,000-character budget. It does not test any product's server-side retrieval or LLM ranking, which may recall much more.
+
+The paid stages were capped at $17.50 in total (extension: $3).
 
 ## Validation ($0)
 
@@ -106,6 +116,11 @@ python scripts/label_notes.py run1                     # then review the new lab
 python scripts/paid.py freeze-corpus --corpus run1 --repos billing notify inventory ingest
 python scripts/paid.py eval --stage main --run main --corpus run1 --epochs 5
 python scripts/analyze.py runs/eval/main --corpus runs/history/run1
+python scripts/validate_ext.py                          # extension gate (G1-ext)
+python scripts/manifest.py --freeze
+python scripts/paid.py freeze-corpus --ext --corpus ext1 --repos billing notify inventory ingest   # ext1 = copies of run1's sessions and notes
+python scripts/paid.py eval --ext --stage ext --run ext --corpus ext1 --epochs 10
+python scripts/analyze_ext.py runs/eval/ext
 python scripts/analyze.py runs/eval/pilot --corpus runs/history/run1
 ```
 
@@ -118,6 +133,10 @@ Paid stages read the API key from a gitignored `.env`. Run them on AC power, wit
 - Some other tampering is flagged by static patterns and checked by hand.
 - A determined candidate could still forge a run (see Limits).
 - Every request, including every retry, reserves its worst-case cost against its stage's cap before it is sent. A request that may have been billed without returning usage is booked at that worst case.
+
+## Data
+
+`runs/` (history transcripts, distilled notes and labels, frozen corpora, every episode's transcript and result, spend ledgers) is not in git. It is published as a separate data release, `runs.tar.gz`.
 
 ## Limits
 
