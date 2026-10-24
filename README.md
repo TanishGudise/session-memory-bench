@@ -7,7 +7,7 @@ Coding agents now run inside teams, and products that carry memory between their
 - the lessons in it are labelled;
 - grading is by hidden tests only, with no LLM judge.
 
-The design, metrics and stop rules were registered before any model call: [PREREGISTRATION.md](PREREGISTRATION.md). Later changes and additions are dated amendments made before the runs they affect, and the extension has its own addendum ([ext/ADDENDUM.md](ext/ADDENDUM.md)).
+The design, metrics and stop rules were registered before any model call: [PREREGISTRATION.md](PREREGISTRATION.md). Each later run was preceded by a dated amendment, and the extension has its own addendum ([ext/ADDENDUM.md](ext/ADDENDUM.md)). Amendment 3, after the main run, records a deviation and one task exclusion under the registered defect rule.
 
 ## How it works
 
