@@ -185,7 +185,7 @@ def cmd_eval(a, s: Session):
     corpus_dir = RUNS / "history" / a.corpus
     run_dir = RUNS / "eval" / a.run
     cm, blobs = load_frozen(corpus_dir)
-    if a.stage == "ext":  # an extension run on a corpus without the extension's chat would be invalid (checked before any write)
+    if a.stage == "ext":  # an extension run on a corpus without the extension's chat would be invalid (checked before any run file)
         import yaml
         have = {c.source for c in corpus_mod.loads(blobs["chunks.jsonl"].decode())}
         want = {m["id"] for m in yaml.safe_load((ROOT / "ext" / "chat.yaml").read_text())["messages"]}

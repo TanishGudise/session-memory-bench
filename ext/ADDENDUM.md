@@ -20,9 +20,9 @@ Five S-i tasks in `ext/tasks/`. Each reuses a main M task's prompt and functiona
 
 - **Invisible.** Main's code shows neither rule. `scripts/validate_ext.py` checks each new lesson's `evidence` patterns against main's files and finds none. The new values are not common defaults.
 - **Tests.**
-  - `func`: the base task's functional tests. inventory-i2 uses SFO only, so its functional tests don't depend on either rule.
+  - `func`: the base task's functional tests (billing-i1's and notify-i1's with their dates moved after the change). inventory-i2 uses SFO only, so its functional tests don't depend on either rule.
   - `lesson`: the new rule. billing-i2 also keeps billing-04's two idempotency lesson tests, so its pass needs idempotency too; in the main run, 30 of 30 billing-04 episodes passed the repeated-call test and 29 of 30 the timeout test.
-  - `diag`: passes only for the old rule (its own boundaries and threshold). Test dates fall after the change, so applying the new rule from its stated date counts as the new rule.
+  - `diag`: passes only for the old rule (its threshold; for quiet hours, the end at the minute and the start at :30, as in notify-01 and the new-rule test). In billing-i1 and notify-i1, test dates fall after the change, so applying the new rule from its stated date counts as the new rule.
   - A pass needs every func and lesson test to pass, and the episode to have finished, as in the main run.
 - **Solutions.**
   - `oracle`: the base task's reference solution with the new value.

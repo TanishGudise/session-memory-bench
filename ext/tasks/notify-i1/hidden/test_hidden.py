@@ -39,10 +39,10 @@ def test_lesson_quiet_hours_boundaries():
     assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(13, 30)) == []      # 21:30 local
 
 
-def test_diag_old_quiet_hours():  # the old rule's own boundaries: 09:00 sends, 08:59 doesn't, 19:59 sends, 20:00 doesn't
+def test_diag_old_quiet_hours():  # the old rule's own boundaries: 09:00 sends, 08:59 doesn't, 19:59 sends, 20:30 doesn't
     la = [_u("la", 1, "America/Los_Angeles")]
     assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(16, 0)) == ["la"]
     assert send_promo_sms(FakeSMSProvider(), la, "hi", _at(15, 59)) == []
     sh = [_u("sh", 2, "Asia/Shanghai")]
     assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(11, 59)) == ["sh"]
-    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 0)) == []
+    assert send_promo_sms(FakeSMSProvider(), sh, "hi", _at(12, 30)) == []
