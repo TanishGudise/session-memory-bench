@@ -9,6 +9,14 @@ Coding agents now run inside teams, and products that carry memory between their
 
 The design, metrics and stop rules were registered before any model call: [PREREGISTRATION.md](PREREGISTRATION.md). Each later run was preceded by a dated amendment, and the extension has its own addendum ([ext/ADDENDUM.md](ext/ADDENDUM.md)). Amendment 3, after the main run, records a deviation and one task exclusion under the registered defect rule.
 
+## Reproduce the reported numbers (one command, no API key)
+
+```
+bash repro.sh
+```
+
+This needs Python 3.13 with `pyyaml` and `numpy`, plus `curl`. It downloads the run data from the `data-v2` release and checks its sha256. Then it re-runs both pre-registered analyses (`scripts/analyze.py`, `scripts/analyze_ext.py`) and checks 35 headline numbers against [RESULTS.md](RESULTS.md) and [EXT_RESULTS.md](EXT_RESULTS.md). Re-running the experiment itself needs an Anthropic API key and the setup under [Running](#running).
+
 ## How it works
 
 1. **A small organisation with a past.** Four small repositories (roughly 280–620 lines each, tests included) evolve through dated steps ([repos/](repos)). `billing`, `notify` and `ingest` are Python; `inventory` is TypeScript run directly by Node.
@@ -136,7 +144,9 @@ Paid stages read the API key from a gitignored `.env`. Run them on AC power, wit
 
 ## Data
 
-`runs/` (history transcripts, distilled notes and labels, frozen corpora, every episode's transcript and result, spend ledgers) is not in git. It is published as a separate data release: `runs.tar.gz` in the repo's `data-v1` release (extract at the repo root).
+`runs/` (history transcripts, distilled notes and labels, frozen corpora, every episode's transcript and result, spend ledgers) is not in git. It is published as a separate data release: `runs.tar.gz` in the `data-v2` release (extract at the repo root).
+
+The release is redacted in one way: the run machine's absolute work-folder path, which appears in 17 lines of test-runner tracebacks in 10 transcripts, was replaced with `~/.smb-work`. Its `REDACTIONS.md` lists each file with its sha256 before and after. Two of those files are history transcripts in the frozen corpora, so they no longer match the hashes in those corpora's `CORPUS_MANIFEST.json`.
 
 ## Limits
 
@@ -145,3 +155,7 @@ Paid stages read the API key from a gitignored `.env`. Run them on AC power, wit
 - small synthetic repos;
 - a candidate that deliberately forges a test run could still pass; static flags and hand checks are the backstop;
 - the graded code shares a process with the hidden tests (editable paths are allowlisted, the JUnit set is checked exactly, and suspicious code is flagged for hand-checking).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
